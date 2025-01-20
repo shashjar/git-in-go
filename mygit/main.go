@@ -5,29 +5,31 @@ import (
 	"os"
 )
 
-// Usage: your_program.sh <command> <arg1> <arg2> ...
+const REPO_DIR = "repo/"
+
+// Usage: ./run.sh <command> [<args>...]
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: mygit <command> [<args>...]\n")
+		fmt.Fprintf(os.Stderr, "Usage: ./run.sh <command> [<args>...]\n")
 		os.Exit(1)
 	}
 
 	switch command := os.Args[1]; command {
 	case "init":
 		for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
-			if err := os.MkdirAll(dir, 0755); err != nil {
+			if err := os.MkdirAll(REPO_DIR+dir, 0755); err != nil {
 				fmt.Fprintf(os.Stderr, "Error creating directory: %s\n", err)
 			}
 		}
 
 		headFileContents := []byte("ref: refs/heads/main\n")
-		if err := os.WriteFile(".git/HEAD", headFileContents, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing file: %s\n", err)
+		if err := os.WriteFile(REPO_DIR+".git/HEAD", headFileContents, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing HEAD file: %s\n", err)
 		}
 
-		fmt.Println("Initialized git directory")
+		fmt.Println("Initialized git repository")
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command %s\n", command)
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
 	}
 }
