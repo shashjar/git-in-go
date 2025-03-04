@@ -2,6 +2,8 @@ package main
 
 import (
 	"compress/zlib"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -28,8 +30,8 @@ func isValidObjectHash(objHash string) bool {
 	return is_alphanumeric
 }
 
-func readBlobObjectFromFile(objHash string) (*BlobObject, error) {
-	objPath := fmt.Sprintf("%s/.git/objects/%s/%s", REPO_DIR, objHash[:2], objHash[2:])
+func readBlobObjectFile(objHash string) (*BlobObject, error) {
+	objPath := REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
 	file, err := os.Open(objPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open object file")
@@ -58,6 +60,42 @@ func readBlobObjectFromFile(objHash string) (*BlobObject, error) {
 	}
 
 	content := parts[1]
+
+	return &BlobObject{
+		hash:      objHash,
+		sizeBytes: sizeBytes,
+		content:   content,
+	}, nil
+}
+
+func createBlobObjectFromFile(filePath string) (*BlobObject, error) {
+	contentBytes, err := os.ReadFile(REPO_DIR + filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file")
+	}
+	content := string(contentBytes)
+	sizeBytes := len(contentBytes)
+
+	objFileContent := fmt.Sprintf("blob %d\x00%s", sizeBytes, content)
+	objFileContentBytes := []byte(objFileContent)
+	objHashBytes := sha1.Sum(objFileContentBytes)
+	objHash := hex.EncodeToString(objHashBytes[:])
+
+	objPath := "./" + REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
+	objFile, err := os.Create(objPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create object file")
+	}
+
+	w := zlib.NewWriter(objFile)
+	defer w.Close()
+	n, err := w.Write(objFileContentBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write to object file")
+	}
+	if n != len(objFileContentBytes) {
+		return nil, fmt.Errorf("failed to write complete contents to object file")
+	}
 
 	return &BlobObject{
 		hash:      objHash,

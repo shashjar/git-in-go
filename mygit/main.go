@@ -26,6 +26,8 @@ func main() {
 		initHandler()
 	case "cat-file":
 		catFileHandler()
+	case "hash-object":
+		hashObjectHandler()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

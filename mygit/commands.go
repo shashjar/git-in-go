@@ -36,10 +36,24 @@ func catFileHandler() {
 		log.Fatalf("Invalid object hash: %s\n", objHash)
 	}
 
-	blobObj, err := readBlobObjectFromFile(objHash)
+	blobObj, err := readBlobObjectFile(objHash)
 	if err != nil {
 		log.Fatalf("Could not read object file: %s\n", err)
 	}
 
 	fmt.Printf(blobObj.content)
+}
+
+func hashObjectHandler() {
+	if len(os.Args) != 4 || os.Args[2] != "-w" {
+		log.Fatal("Usage: hash-object -w <file>")
+	}
+
+	filePath := os.Args[3]
+	blobObj, err := createBlobObjectFromFile(filePath)
+	if err != nil {
+		log.Fatalf("Could not create blob object from file: %s\n", err)
+	}
+
+	fmt.Println(blobObj.hash)
 }
