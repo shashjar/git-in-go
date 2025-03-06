@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -56,4 +57,28 @@ func hashObjectHandler() {
 	}
 
 	fmt.Println(blobObj.hash)
+}
+
+func lsTreeHandler() {
+	nameOnlyPtr := flag.Bool("name-only", false, "Indicates whether the ls-tree output should list names only")
+	flag.Parse()
+
+	if len(os.Args) != 3 && len(os.Args) != 4 {
+		log.Fatal("Usage: ls-tree [--name-only] <tree_sha>")
+	}
+
+	treeHash := os.Args[len(os.Args)-1]
+	if !isValidObjectHash(treeHash) {
+		log.Fatalf("Invalid object hash: %s\n", treeHash)
+	}
+
+	treeObj, err := readTreeObjectFile(treeHash)
+	if err != nil {
+		log.Fatalf("Could not read tree object file: %s\n", err)
+	}
+
+	for _, entry := range treeObj.entries {
+		entryString := entry.toString(*nameOnlyPtr)
+		fmt.Println(entryString)
+	}
 }

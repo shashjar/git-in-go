@@ -28,6 +28,8 @@ func main() {
 		catFileHandler()
 	case "hash-object":
 		hashObjectHandler()
+	case "ls-tree":
+		lsTreeHandler()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
