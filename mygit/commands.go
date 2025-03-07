@@ -51,7 +51,7 @@ func hashObjectHandler() {
 	}
 
 	filePath := os.Args[3]
-	blobObj, err := createBlobObjectFromFile(filePath)
+	blobObj, err := createBlobObjectFromFile(REPO_DIR + filePath)
 	if err != nil {
 		log.Fatalf("Could not create blob object from file: %s\n", err)
 	}
@@ -81,4 +81,17 @@ func lsTreeHandler() {
 		entryString := entry.toString(*nameOnlyPtr)
 		fmt.Println(entryString)
 	}
+}
+
+func writeTreeHandler() {
+	if len(os.Args) != 2 {
+		log.Fatal("Usage: write-tree")
+	}
+
+	treeObj, err := createTreeObjectFromDirectory(REPO_DIR)
+	if err != nil {
+		log.Fatalf("Could not create tree object for directory: %s\n", err)
+	}
+
+	fmt.Println(treeObj.hash)
 }

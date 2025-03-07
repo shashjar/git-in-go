@@ -30,6 +30,8 @@ func main() {
 		hashObjectHandler()
 	case "ls-tree":
 		lsTreeHandler()
+	case "write-tree":
+		writeTreeHandler()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -36,7 +38,14 @@ func (ot *ObjectType) toString() string {
 	}
 }
 
-var VALID_MODES = []int{100644, 100755, 12000, 40000}
+const (
+	REGULAR_FILE_MODE    = 100644
+	EXECUTABLE_FILE_MODE = 100755
+	SYMBOLIC_LINK_MODE   = 120000
+	DIRECTORY_MODE       = 40000
+)
+
+var VALID_MODES = []int{REGULAR_FILE_MODE, EXECUTABLE_FILE_MODE, SYMBOLIC_LINK_MODE, DIRECTORY_MODE}
 
 // Represents a Git blob object, which stores the contents of a file
 type BlobObject struct {
@@ -104,6 +113,41 @@ func readObjectFile(objHash string) ([]byte, error) {
 	return data, nil
 }
 
+func createObjectFile(objType string, contentBytes []byte) (string, error) {
+	content := string(contentBytes)
+	sizeBytes := len(contentBytes)
+
+	objFileContent := fmt.Sprintf("%s %d\x00%s", objType, sizeBytes, content)
+	objFileContentBytes := []byte(objFileContent)
+	objHashBytes := sha1.Sum(objFileContentBytes)
+	objHash := hex.EncodeToString(objHashBytes[:])
+
+	objPath := REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
+
+	dir := filepath.Dir(objPath)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return "", fmt.Errorf("failed to create directories storing object file")
+	}
+
+	objFile, err := os.Create(objPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create object file")
+	}
+	defer objFile.Close()
+
+	w := zlib.NewWriter(objFile)
+	defer w.Close()
+	n, err := w.Write(objFileContentBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to write to object file")
+	}
+	if n != len(objFileContentBytes) {
+		return "", fmt.Errorf("failed to write complete contents to object file")
+	}
+
+	return objHash, nil
+}
+
 /** BLOBS */
 
 func readBlobObjectFile(objHash string) (*BlobObject, error) {
@@ -140,36 +184,20 @@ func readBlobObjectFile(objHash string) (*BlobObject, error) {
 }
 
 func createBlobObjectFromFile(filePath string) (*BlobObject, error) {
-	contentBytes, err := os.ReadFile(REPO_DIR + filePath)
+	contentBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file")
 	}
 	content := string(contentBytes)
 	sizeBytes := len(contentBytes)
 
-	objFileContent := fmt.Sprintf("blob %d\x00%s", sizeBytes, content)
-	objFileContentBytes := []byte(objFileContent)
-	objHashBytes := sha1.Sum(objFileContentBytes)
-	objHash := hex.EncodeToString(objHashBytes[:])
-
-	objPath := "./" + REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
-	objFile, err := os.Create(objPath)
+	blobObjHash, err := createObjectFile("blob", contentBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create object file")
-	}
-
-	w := zlib.NewWriter(objFile)
-	defer w.Close()
-	n, err := w.Write(objFileContentBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write to object file")
-	}
-	if n != len(objFileContentBytes) {
-		return nil, fmt.Errorf("failed to write complete contents to object file")
+		return nil, err
 	}
 
 	return &BlobObject{
-		hash:      objHash,
+		hash:      blobObjHash,
 		sizeBytes: sizeBytes,
 		content:   content,
 	}, nil
@@ -249,6 +277,82 @@ func readTreeObjectFile(objHash string) (*TreeObject, error) {
 
 	return &TreeObject{
 		hash:      objHash,
+		sizeBytes: sizeBytes,
+		entries:   entries,
+	}, nil
+}
+
+func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
+	dirEntries, err := os.ReadDir(dir)
+	if err != nil {
+		log.Fatalf("Could not read contents of directory")
+	}
+
+	entries := []TreeObjectEntry{}
+	for _, dirEntry := range dirEntries {
+		if strings.HasPrefix(dirEntry.Name(), ".") {
+			continue
+		}
+
+		fullPath := filepath.Join(dir, dirEntry.Name())
+
+		if dirEntry.IsDir() {
+			subDirTreeObj, err := createTreeObjectFromDirectory(fullPath)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, TreeObjectEntry{
+				hash:    subDirTreeObj.hash,
+				mode:    DIRECTORY_MODE,
+				name:    dirEntry.Name(),
+				objType: Tree,
+			})
+		} else {
+			fileInfo, err := os.Lstat(fullPath)
+			if err != nil {
+				return nil, err
+			}
+
+			var mode int
+			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				mode = SYMBOLIC_LINK_MODE
+			} else if fileInfo.Mode()&0111 != 0 {
+				mode = EXECUTABLE_FILE_MODE
+			} else {
+				mode = REGULAR_FILE_MODE
+			}
+
+			fileBlobObj, err := createBlobObjectFromFile(fullPath)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, TreeObjectEntry{
+				hash:    fileBlobObj.hash,
+				mode:    mode,
+				name:    dirEntry.Name(),
+				objType: Blob,
+			})
+		}
+	}
+
+	sort.Slice(entries, func(i int, j int) bool {
+		return entries[i].name < entries[j].name
+	})
+
+	var contentBuilder strings.Builder
+	for _, entry := range entries {
+		fmt.Fprintf(&contentBuilder, "%d %s\x00%s", entry.mode, entry.name, entry.hash)
+	}
+	contentBytes := []byte(contentBuilder.String())
+	sizeBytes := len(contentBytes)
+
+	treeObjHash, err := createObjectFile("tree", contentBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TreeObject{
+		hash:      treeObjHash,
 		sizeBytes: sizeBytes,
 		entries:   entries,
 	}, nil
