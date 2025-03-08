@@ -38,6 +38,8 @@ func (ot *ObjectType) toString() string {
 	}
 }
 
+const MODE_LENGTH = 6
+
 const (
 	REGULAR_FILE_MODE    = 100644
 	EXECUTABLE_FILE_MODE = 100755
@@ -209,7 +211,8 @@ func (e *TreeObjectEntry) toString(nameOnly bool) string {
 	if nameOnly {
 		return e.name
 	} else {
-		return fmt.Sprintf("%d %s %s    %s", e.mode, e.objType.toString(), e.hash, e.name)
+		mode := fmt.Sprintf("%06d", e.mode)
+		return fmt.Sprintf("%s %s %s    %s", mode, e.objType.toString(), e.hash, e.name)
 	}
 }
 
@@ -246,9 +249,6 @@ func readTreeObjectFile(objHash string) (*TreeObject, error) {
 	}
 
 	parts := strings.Split(string(data), "\x00")
-	if len(parts) < 1 || len(parts)%2 == 0 {
-		return nil, fmt.Errorf("object file poorly formatted - header, entry headers, and entry hashes should be null byte-separated")
-	}
 
 	headerParts := strings.Split(parts[0], " ")
 	if len(headerParts) != 2 {
@@ -264,8 +264,15 @@ func readTreeObjectFile(objHash string) (*TreeObject, error) {
 	}
 
 	entries := []TreeObjectEntry{}
-	for i := 1; i < len(parts); i += 2 {
-		entry, err := parseTreeObjectEntry(parts[i], parts[i+1])
+	for i := 1; i < len(parts)-1; i++ {
+		var entryHeader string
+		if i == 1 {
+			entryHeader = parts[i]
+		} else {
+			entryHeader = parts[i][OBJECT_HASH_LENGTH:]
+		}
+
+		entry, err := parseTreeObjectEntry(entryHeader, parts[i+1][:OBJECT_HASH_LENGTH])
 		if err != nil {
 			return nil, err
 		}
