@@ -32,6 +32,8 @@ func main() {
 		lsTreeHandler()
 	case "write-tree":
 		writeTreeHandler()
+	case "print-object":
+		utilPrintObjectHandler()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
