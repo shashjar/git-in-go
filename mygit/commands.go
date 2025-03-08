@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -60,10 +59,12 @@ func hashObjectHandler() {
 }
 
 func lsTreeHandler() {
-	nameOnlyPtr := flag.Bool("name-only", false, "Indicates whether the ls-tree output should list names only")
-	flag.Parse()
-
-	if len(os.Args) != 3 && len(os.Args) != 4 {
+	var nameOnly bool
+	if len(os.Args) == 3 {
+		nameOnly = false
+	} else if len(os.Args) == 4 && os.Args[2] == "--name-only" {
+		nameOnly = true
+	} else {
 		log.Fatal("Usage: ls-tree [--name-only] <tree_sha>")
 	}
 
@@ -78,7 +79,7 @@ func lsTreeHandler() {
 	}
 
 	for _, entry := range treeObj.entries {
-		entryString := entry.toString(*nameOnlyPtr)
+		entryString := entry.toString(nameOnly)
 		fmt.Println(entryString)
 	}
 }
