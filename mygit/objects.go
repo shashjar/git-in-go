@@ -8,12 +8,14 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const OBJECT_HASH_LENGTH = 40
@@ -69,6 +71,24 @@ type TreeObjectEntry struct {
 	mode    int
 	name    string
 	objType ObjectType
+}
+
+// Represents a Git commit object, which represents a snapshot of the repository at a point in time
+type CommitObject struct {
+	hash               string
+	sizeBytes          int
+	parentCommitHashes []string
+	author             CommitUser
+	committer          CommitUser
+	commitMessage      string
+}
+
+// Represents a user (author or committer) associated with a Git commit
+type CommitUser struct {
+	name        string
+	email       string
+	dateSeconds int64
+	timezone    string
 }
 
 /** GENERIC TO ALL OBJECTS */
@@ -362,5 +382,50 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 		hash:      treeObjHash,
 		sizeBytes: sizeBytes,
 		entries:   entries,
+	}, nil
+}
+
+/** COMMITS */
+
+func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string) (*CommitObject, error) {
+	var contentBuilder strings.Builder
+	fmt.Fprintf(&contentBuilder, "tree %s", treeHash)
+
+	for _, parentCommitHash := range parentCommitHashes {
+		fmt.Fprintf(&contentBuilder, "parent %s", parentCommitHash)
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	_, offset := now.Zone()
+	timezone := fmt.Sprintf("%+03d:%02d", offset/3600, (offset%3600)/60)
+	author_committer := CommitUser{
+		name:        currentUser.Name,
+		email:       fmt.Sprintf("%s@mygit.com", currentUser.Username),
+		dateSeconds: now.Unix(),
+		timezone:    timezone,
+	}
+	fmt.Fprintf(&contentBuilder, "author %s %s %d %s", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
+	fmt.Fprintf(&contentBuilder, "committer %s %s %d %s", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
+
+	fmt.Fprintf(&contentBuilder, "\n\n%s", commitMessage)
+
+	contentBytes := []byte(contentBuilder.String())
+	sizeBytes := len(contentBytes)
+	commitObjHash, err := createObjectFile("commit", contentBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CommitObject{
+		hash:               commitObjHash,
+		sizeBytes:          sizeBytes,
+		parentCommitHashes: parentCommitHashes,
+		author:             author_committer,
+		committer:          author_committer,
+		commitMessage:      commitMessage,
 	}, nil
 }

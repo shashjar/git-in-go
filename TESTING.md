@@ -25,3 +25,11 @@ Then use the outputted tree hash with
 ```
 ./run.sh ls-tree [--name-only] <tree_hash>
 ```
+
+# `git commit-tree`
+
+```
+echo "hello world" > test.txt
+./run.sh write-tree
+./run.sh commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m "Initial commit"
+```

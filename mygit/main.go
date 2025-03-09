@@ -32,6 +32,8 @@ func main() {
 		lsTreeHandler()
 	case "write-tree":
 		writeTreeHandler()
+	case "commit-tree":
+		commitTreeHandler()
 	case "print-object":
 		utilPrintObjectHandler()
 	default:

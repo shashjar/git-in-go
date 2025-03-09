@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -95,4 +96,36 @@ func writeTreeHandler() {
 	}
 
 	fmt.Println(treeObj.hash)
+}
+
+func commitTreeHandler() {
+	if len(os.Args) < 3 || len(os.Args) > 7 {
+		log.Fatal("Usage: commit-tree <tree_sha> [-p <parent_commit_sha>] [-m <commit_message>]")
+	}
+
+	treeHash := os.Args[2]
+	if !isValidObjectHash(treeHash) {
+		log.Fatalf("Invalid object hash: %s\n", treeHash)
+	}
+
+	os.Args = append(os.Args[0:1], os.Args[3:]...)
+	parentCommitHashPtr := flag.String("p", "", "Parent commit")
+	commitMessagePtr := flag.String("m", "Made a commit!", "Commit message")
+	flag.Parse()
+
+	if *parentCommitHashPtr != "" && !isValidObjectHash(*parentCommitHashPtr) {
+		log.Fatalf("Invalid parent commit hash: %s\n", *parentCommitHashPtr)
+	}
+
+	var parentCommitHashes []string
+	if *parentCommitHashPtr != "" {
+		parentCommitHashes = append(parentCommitHashes, *parentCommitHashPtr)
+	}
+
+	commitObj, err := createCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr)
+	if err != nil {
+		log.Fatalf("Could not create commit object from tree: %s\n", err)
+	}
+
+	fmt.Println(commitObj.hash)
 }
