@@ -28,8 +28,9 @@ func initHandler() {
 }
 
 func catFileHandler() {
-	if len(os.Args) != 4 || os.Args[2] != "-p" {
-		log.Fatal("Usage: cat-file -p <object_sha>")
+	flag := os.Args[2]
+	if len(os.Args) != 4 || (flag != "-t" && flag != "-s" && flag != "-p") {
+		log.Fatal("Usage: cat-file (-t | -s | -p) <object_sha>")
 	}
 
 	objHash := os.Args[3]
@@ -42,8 +43,17 @@ func catFileHandler() {
 		log.Fatalf("Could not read object file: %s\n", err)
 	}
 
-	s := obj.PrettyPrint()
-	fmt.Print(s)
+	switch flag {
+	case "-t":
+		t := obj.GetObjectType()
+		fmt.Println(t.toString())
+	case "-s":
+		s := obj.GetSizeBytes()
+		fmt.Println(s)
+	case "-p":
+		p := obj.PrettyPrint()
+		fmt.Print(p)
+	}
 }
 
 func hashObjectHandler() {

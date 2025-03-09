@@ -51,7 +51,13 @@ var VALID_MODES = []int{REGULAR_FILE_MODE, EXECUTABLE_FILE_MODE, SYMBOLIC_LINK_M
 
 // GitObject is the common interface for all Git objects (blobs, trees, commits)
 type GitObject interface {
-	// PrettyPrint returns a pretty-printed string representing the object and its contents
+	// Returns the type of this object
+	GetObjectType() ObjectType
+
+	// Gets the content size in bytes for this object
+	GetSizeBytes() int
+
+	// Returns a pretty-printed string representing the object and its contents
 	PrettyPrint() string
 }
 
@@ -60,6 +66,14 @@ type BlobObject struct {
 	hash      string
 	sizeBytes int
 	content   string
+}
+
+func (b *BlobObject) GetObjectType() ObjectType {
+	return Blob
+}
+
+func (b *BlobObject) GetSizeBytes() int {
+	return b.sizeBytes
 }
 
 func (b *BlobObject) PrettyPrint() string {
@@ -79,6 +93,14 @@ type TreeObjectEntry struct {
 	mode    int
 	name    string
 	objType ObjectType
+}
+
+func (t *TreeObject) GetObjectType() ObjectType {
+	return Tree
+}
+
+func (t *TreeObject) GetSizeBytes() int {
+	return t.sizeBytes
 }
 
 func (t *TreeObject) PrettyPrint() string {
@@ -107,6 +129,14 @@ type CommitUser struct {
 	email       string
 	dateSeconds int64
 	timezone    string
+}
+
+func (c *CommitObject) GetObjectType() ObjectType {
+	return Commit
+}
+
+func (c *CommitObject) GetSizeBytes() int {
+	return c.sizeBytes
 }
 
 func (c *CommitObject) PrettyPrint() string {
