@@ -34,8 +34,8 @@ func main() {
 		writeTreeHandler()
 	case "commit-tree":
 		commitTreeHandler()
-	case "print-object":
-		utilPrintObjectHandler()
+	case "clone":
+		cloneHandler()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

@@ -130,3 +130,18 @@ func commitTreeHandler() {
 
 	fmt.Println(commitObj.hash)
 }
+
+// TODO: implement
+func cloneHandler() {
+	if len(os.Args) != 4 {
+		log.Fatal("Usage: clone <repo_url> <some_dir>")
+	}
+
+	// repoURL := os.Args[2]
+	dir := os.Args[3]
+
+	err := os.Mkdir(dir, 0755)
+	if err != nil {
+		log.Fatalf("Failed to create repository directory: %s\n", err)
+	}
+}

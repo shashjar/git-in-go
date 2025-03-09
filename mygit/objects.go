@@ -112,12 +112,13 @@ type CommitUser struct {
 func (c *CommitObject) PrettyPrint() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "commit %d\n", c.sizeBytes)
+	fmt.Fprintf(&sb, "tree %s\n", c.treeHash)
 	for _, parentCommitHash := range c.parentCommitHashes {
 		fmt.Fprintf(&sb, "parent %s", parentCommitHash)
 	}
 	fmt.Fprintf(&sb, "author %s <%s> %d %s\n", c.author.name, c.author.email, c.author.dateSeconds, c.author.timezone)
 	fmt.Fprintf(&sb, "committer %s <%s> %d %s\n", c.committer.name, c.committer.email, c.committer.dateSeconds, c.committer.timezone)
-	fmt.Fprintf(&sb, "\n\n%s\n", c.commitMessage)
+	fmt.Fprintf(&sb, "\n%s\n", c.commitMessage)
 	return sb.String()
 }
 
