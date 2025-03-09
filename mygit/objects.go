@@ -298,8 +298,8 @@ func parseCommitUser(s string) (*CommitUser, error) {
 		return nil, err
 	}
 	return &CommitUser{
-		name:        parts[1] + parts[2],
-		email:       parts[3],
+		name:        parts[1] + " " + parts[2],
+		email:       parts[3][1 : len(parts[3])-1],
 		dateSeconds: int64(dateSeconds),
 		timezone:    parts[5],
 	}, nil
