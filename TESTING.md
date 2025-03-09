@@ -31,5 +31,5 @@ Then use the outputted tree hash with
 ```
 echo "hello world" > test.txt
 ./run.sh write-tree
-./run.sh commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m "Initial commit"
+./run.sh commit-tree f5e9585a3f08476bd248b12e64230900c21baace -m "Initial commit"
 ```

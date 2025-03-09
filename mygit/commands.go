@@ -29,7 +29,7 @@ func initHandler() {
 
 func catFileHandler() {
 	if len(os.Args) != 4 || os.Args[2] != "-p" {
-		log.Fatal("Usage: cat-file -p <blob_sha>")
+		log.Fatal("Usage: cat-file -p <object_sha>")
 	}
 
 	objHash := os.Args[3]
@@ -37,12 +37,13 @@ func catFileHandler() {
 		log.Fatalf("Invalid object hash: %s\n", objHash)
 	}
 
-	blobObj, err := readBlobObjectFile(objHash)
+	obj, err := getObject(objHash)
 	if err != nil {
 		log.Fatalf("Could not read object file: %s\n", err)
 	}
 
-	fmt.Printf(blobObj.content)
+	s := obj.PrettyPrint()
+	fmt.Print(s)
 }
 
 func hashObjectHandler() {

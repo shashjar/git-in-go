@@ -40,8 +40,6 @@ func (ot *ObjectType) toString() string {
 	}
 }
 
-const MODE_LENGTH = 6
-
 const (
 	REGULAR_FILE_MODE    = 100644
 	EXECUTABLE_FILE_MODE = 100755
@@ -51,11 +49,21 @@ const (
 
 var VALID_MODES = []int{REGULAR_FILE_MODE, EXECUTABLE_FILE_MODE, SYMBOLIC_LINK_MODE, DIRECTORY_MODE}
 
+// GitObject is the common interface for all Git objects (blobs, trees, commits)
+type GitObject interface {
+	// PrettyPrint returns a pretty-printed string representing the object and its contents
+	PrettyPrint() string
+}
+
 // Represents a Git blob object, which stores the contents of a file
 type BlobObject struct {
 	hash      string
 	sizeBytes int
 	content   string
+}
+
+func (b *BlobObject) PrettyPrint() string {
+	return fmt.Sprintf("blob %d\n%s", b.sizeBytes, b.content)
 }
 
 // Represents a Git tree object, which stores a directory structure
@@ -73,10 +81,20 @@ type TreeObjectEntry struct {
 	objType ObjectType
 }
 
+func (t *TreeObject) PrettyPrint() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "tree %d\n", t.sizeBytes)
+	for _, entry := range t.entries {
+		fmt.Fprintf(&sb, "%06d %s %s\n", entry.mode, entry.name, entry.hash)
+	}
+	return sb.String()
+}
+
 // Represents a Git commit object, which represents a snapshot of the repository at a point in time
 type CommitObject struct {
 	hash               string
 	sizeBytes          int
+	treeHash           string
 	parentCommitHashes []string
 	author             CommitUser
 	committer          CommitUser
@@ -89,6 +107,18 @@ type CommitUser struct {
 	email       string
 	dateSeconds int64
 	timezone    string
+}
+
+func (c *CommitObject) PrettyPrint() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "commit %d\n", c.sizeBytes)
+	for _, parentCommitHash := range c.parentCommitHashes {
+		fmt.Fprintf(&sb, "parent %s", parentCommitHash)
+	}
+	fmt.Fprintf(&sb, "author %s <%s> %d %s\n", c.author.name, c.author.email, c.author.dateSeconds, c.author.timezone)
+	fmt.Fprintf(&sb, "committer %s <%s> %d %s\n", c.committer.name, c.committer.email, c.committer.dateSeconds, c.committer.timezone)
+	fmt.Fprintf(&sb, "\n\n%s\n", c.commitMessage)
+	return sb.String()
 }
 
 /** GENERIC TO ALL OBJECTS */
@@ -106,12 +136,72 @@ func isValidMode(mode int) bool {
 	return slices.Contains(VALID_MODES, mode)
 }
 
+func getObjectType(objHash string) (ObjectType, error) {
+	data, err := readObjectFile(objHash)
+	if err != nil {
+		return -1, err
+	}
+
+	parts := strings.SplitN(string(data), "\x00", 2)
+	if len(parts) != 2 {
+		return -1, fmt.Errorf("object file poorly formatted - header and contents should be separated by null byte")
+	}
+
+	headerParts := strings.Split(parts[0], " ")
+	if len(headerParts) != 2 {
+		return -1, fmt.Errorf("object file poorly formatted - header parts should be space-separated")
+	}
+
+	if headerParts[0] == "blob" {
+		return Blob, nil
+	} else if headerParts[0] == "tree" {
+		return Tree, nil
+	} else if headerParts[0] == "commit" {
+		return Commit, nil
+	} else {
+		return -1, fmt.Errorf("unknown object type %s", headerParts[0])
+	}
+}
+
 func getObjectTypeFromMode(mode int) ObjectType {
 	if mode == 40000 {
 		return Tree
 	} else {
 		return Blob
 	}
+}
+
+func getObject(objHash string) (GitObject, error) {
+	objType, err := getObjectType(objHash)
+	if err != nil {
+		return nil, err
+	}
+
+	var gitObj GitObject
+	switch objType {
+	case Blob:
+		blobObj, err := readBlobObjectFile(objHash)
+		if err != nil {
+			return nil, err
+		}
+		gitObj = blobObj
+	case Tree:
+		treeObj, err := readTreeObjectFile(objHash)
+		if err != nil {
+			return nil, err
+		}
+		gitObj = treeObj
+	case Commit:
+		commitObj, err := readCommitObjectFile(objHash)
+		if err != nil {
+			return nil, err
+		}
+		gitObj = commitObj
+	default:
+		return nil, fmt.Errorf("unsupported Git object type")
+	}
+
+	return gitObj, nil
 }
 
 func readObjectFile(objHash string) ([]byte, error) {
@@ -168,6 +258,20 @@ func createObjectFile(objType string, contentBytes []byte) (string, error) {
 	}
 
 	return objHash, nil
+}
+
+func parseCommitUser(s string) (*CommitUser, error) {
+	parts := strings.Split(s, " ")
+	dateSeconds, err := strconv.Atoi(parts[4])
+	if err != nil {
+		return nil, err
+	}
+	return &CommitUser{
+		name:        parts[1] + parts[2],
+		email:       parts[3],
+		dateSeconds: int64(dateSeconds),
+		timezone:    parts[5],
+	}, nil
 }
 
 /** BLOBS */
@@ -389,10 +493,10 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 
 func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string) (*CommitObject, error) {
 	var contentBuilder strings.Builder
-	fmt.Fprintf(&contentBuilder, "tree %s", treeHash)
+	fmt.Fprintf(&contentBuilder, "tree %s\n", treeHash)
 
 	for _, parentCommitHash := range parentCommitHashes {
-		fmt.Fprintf(&contentBuilder, "parent %s", parentCommitHash)
+		fmt.Fprintf(&contentBuilder, "parent %s\n", parentCommitHash)
 	}
 
 	currentUser, err := user.Current()
@@ -401,15 +505,15 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 	}
 	now := time.Now()
 	_, offset := now.Zone()
-	timezone := fmt.Sprintf("%+03d:%02d", offset/3600, (offset%3600)/60)
+	timezone := fmt.Sprintf("%+03d%02d", offset/3600, (offset%3600)/60)
 	author_committer := CommitUser{
 		name:        currentUser.Name,
 		email:       fmt.Sprintf("%s@mygit.com", currentUser.Username),
 		dateSeconds: now.Unix(),
 		timezone:    timezone,
 	}
-	fmt.Fprintf(&contentBuilder, "author %s %s %d %s", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
-	fmt.Fprintf(&contentBuilder, "committer %s %s %d %s", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
+	fmt.Fprintf(&contentBuilder, "author %s <%s> %d %s\n", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
+	fmt.Fprintf(&contentBuilder, "committer %s <%s> %d %s\n", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
 
 	fmt.Fprintf(&contentBuilder, "\n\n%s", commitMessage)
 
@@ -423,9 +527,63 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 	return &CommitObject{
 		hash:               commitObjHash,
 		sizeBytes:          sizeBytes,
+		treeHash:           treeHash,
 		parentCommitHashes: parentCommitHashes,
 		author:             author_committer,
 		committer:          author_committer,
+		commitMessage:      commitMessage,
+	}, nil
+}
+
+func readCommitObjectFile(objHash string) (*CommitObject, error) {
+	data, err := readObjectFile(objHash)
+	if err != nil {
+		return nil, err
+	}
+
+	parts := strings.Split(string(data), "\x00")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("object file poorly formatted - header and contents should be separated by null byte")
+	}
+
+	headerParts := strings.Split(parts[0], " ")
+	if len(headerParts) != 2 {
+		return nil, fmt.Errorf("object file poorly formatted - header parts should be space-separated")
+	}
+
+	if headerParts[0] != "commit" {
+		return nil, fmt.Errorf("object file poorly formatted - header does not start with 'commit'")
+	}
+	sizeBytes, err := strconv.Atoi(headerParts[1])
+	if err != nil {
+		return nil, fmt.Errorf("object file poorly formatted - size is not an integer")
+	}
+
+	lines := strings.Split(parts[1], "\n")
+	treeHash := strings.Split(lines[0], " ")[1]
+	var parentCommitHashes []string
+	i := 1
+	for strings.HasPrefix(lines[i], "parent") {
+		parentCommitHashes = append(parentCommitHashes, strings.Split(lines[i], " ")[1])
+		i += 1
+	}
+	author, err := parseCommitUser(lines[i])
+	if err != nil {
+		return nil, err
+	}
+	committer, err := parseCommitUser(lines[i+1])
+	if err != nil {
+		return nil, err
+	}
+	commitMessage := lines[len(lines)-1]
+
+	return &CommitObject{
+		hash:               objHash,
+		sizeBytes:          sizeBytes,
+		treeHash:           treeHash,
+		parentCommitHashes: parentCommitHashes,
+		author:             *author,
+		committer:          *committer,
 		commitMessage:      commitMessage,
 	}, nil
 }
