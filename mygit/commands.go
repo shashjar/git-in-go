@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func initHandler() {
@@ -141,17 +142,24 @@ func commitTreeHandler() {
 	fmt.Println(commitObj.hash)
 }
 
-// TODO: implement
 func cloneHandler() {
-	if len(os.Args) != 4 {
-		log.Fatal("Usage: clone <repo_url> <some_dir>")
+	if len(os.Args) != 3 && len(os.Args) != 4 {
+		log.Fatal("Usage: clone <repo_url> [some_dir]")
 	}
 
-	// repoURL := os.Args[2]
-	dir := os.Args[3]
-
-	err := os.Mkdir(dir, 0755)
+	repoURL := os.Args[2]
+	err := validateRepoURL(repoURL)
 	if err != nil {
-		log.Fatalf("Failed to create repository directory: %s\n", err)
+		log.Fatalf("Failed to validate structure of repository URL: %s\n", err)
 	}
+
+	var dir string
+	if len(os.Args) == 4 {
+		dir = os.Args[3]
+	} else {
+		repoURLParts := strings.Split(repoURL, "/")
+		dir = repoURLParts[len(repoURLParts)-1]
+	}
+
+	cloneRepoIntoDir(repoURL, dir)
 }

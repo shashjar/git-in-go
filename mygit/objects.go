@@ -159,8 +159,8 @@ func isValidObjectHash(objHash string) bool {
 		return false
 	}
 
-	is_alphanumeric := regexp.MustCompile(`^[a-z0-9]*$`).MatchString(objHash)
-	return is_alphanumeric
+	isAlphanumeric := regexp.MustCompile(`^[a-z0-9]*$`).MatchString(objHash)
+	return isAlphanumeric
 }
 
 func isValidMode(mode int) bool {
@@ -522,6 +522,7 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 
 /** COMMITS */
 
+// TODO: my commit object file format may not match Git's exactly - I added newline characters here to make parsing easier
 func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string) (*CommitObject, error) {
 	var contentBuilder strings.Builder
 	fmt.Fprintf(&contentBuilder, "tree %s\n", treeHash)
