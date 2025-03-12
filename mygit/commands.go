@@ -142,6 +142,7 @@ func commitTreeHandler() {
 	fmt.Println(commitObj.hash)
 }
 
+// TODO: break functions along this code path up as needed + organize them into different files
 func cloneHandler() {
 	if len(os.Args) != 3 && len(os.Args) != 4 {
 		log.Fatal("Usage: clone <repo_url> [some_dir]")

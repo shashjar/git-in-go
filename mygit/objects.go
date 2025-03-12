@@ -1,11 +1,9 @@
 package main
 
 import (
-	"compress/zlib"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/user"
@@ -241,16 +239,11 @@ func readObjectFile(objHash string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open object file")
 	}
+	defer file.Close()
 
-	r, err := zlib.NewReader(io.Reader(file))
+	data, err := zlibUncompress(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize zlib reader")
-	}
-	defer r.Close()
-
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from object file")
+		return nil, err
 	}
 
 	return data, nil
@@ -278,14 +271,9 @@ func createObjectFile(objType string, contentBytes []byte) (string, error) {
 	}
 	defer objFile.Close()
 
-	w := zlib.NewWriter(objFile)
-	defer w.Close()
-	n, err := w.Write(objFileContentBytes)
+	err = zlibCompress(objFile, objFileContentBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to write to object file")
-	}
-	if n != len(objFileContentBytes) {
-		return "", fmt.Errorf("failed to write complete contents to object file")
+		return "", err
 	}
 
 	return objHash, nil
