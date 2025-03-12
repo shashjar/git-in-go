@@ -1,12 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -37,40 +32,4 @@ func validateRepoURL(repoURL string) error {
 	}
 
 	return nil
-}
-
-// TODO: implement
-func cloneRepoIntoDir(repoURL string, dir string) {
-	resp, err := http.Get(repoURL + "/info/refs?service=git-upload-pack")
-	if err != nil {
-		log.Fatalf("Failed to reach remote repository: %s\n", err)
-	}
-	if resp.StatusCode != 200 && resp.StatusCode != 304 {
-		log.Fatalf("Received invalid status code when fetching refs from remote repository: %s\n", resp.Status)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Failed to read response from remote repository: %s\n", err)
-	}
-
-	validFirstBytes := regexp.MustCompile(`^[0-9a-f]{4}#`).MatchString(string(body[:5]))
-	if !validFirstBytes {
-		log.Fatalf("Received invalid response when fetching refs from remote repository\n")
-	}
-
-	pktLines, err := readPktLines(bytes.NewReader(body))
-	if err != nil {
-		log.Fatalf("Failed to parse response when fetching refs from remote repository: %s\n", err)
-	}
-
-	if len(pktLines) == 0 || pktLines[0] != "# service=git-upload-pack" {
-		log.Fatalf("Received invalid response when fetching refs from remote repository\n")
-	}
-
-	// err = os.Mkdir(dir, 0755)
-	// if err != nil {
-	// 	log.Fatalf("Failed to create repository directory: %s\n", err)
-	// }
 }
