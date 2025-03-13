@@ -17,21 +17,24 @@ func zlibCompress(w io.Writer, b []byte) error {
 	if n != len(b) {
 		return fmt.Errorf("failed to write complete byte contents with zlib")
 	}
+	if err := zw.Flush(); err != nil {
+		return fmt.Errorf("failed to flush zlib writer: %s", err)
+	}
 
 	return nil
 }
 
-func zlibUncompress(r io.Reader) ([]byte, error) {
+func zlibDecompress(r io.Reader) ([]byte, error) {
 	zr, err := zlib.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize zlib reader: %s", err)
 	}
 	defer zr.Close()
 
-	data, err := io.ReadAll(zr)
+	decompressed, err := io.ReadAll(zr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to uncompress data with zlib: %s", err)
+		return nil, fmt.Errorf("failed to decompress data with zlib: %s", err)
 	}
 
-	return data, nil
+	return decompressed, nil
 }

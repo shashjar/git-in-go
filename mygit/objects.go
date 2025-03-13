@@ -241,7 +241,7 @@ func readObjectFile(objHash string) ([]byte, error) {
 	}
 	defer file.Close()
 
-	data, err := zlibUncompress(file)
+	data, err := zlibDecompress(file)
 	if err != nil {
 		return nil, err
 	}
