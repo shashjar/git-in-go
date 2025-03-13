@@ -22,7 +22,10 @@ func cloneRepoIntoDir(repoURL string, dir string) {
 		log.Fatalf("Failed to perform git-upload-pack request: %s\n", err)
 	}
 
-	fmt.Println("packfile[:100]:", string(packfile[:100]))
+	err = readPackfile(packfile)
+	if err != nil {
+		log.Fatalf("Failed to read packfile: %s\n", err)
+	}
 
 	// err = os.Mkdir(dir, 0755)
 	// if err != nil {
