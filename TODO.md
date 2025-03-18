@@ -7,3 +7,4 @@
 ## Housekeeping/Tech Debt
 
 - [ ] Update [README](README.md) with information about implementation and usage
+- [ ] Write a blog post or something that has better/clearer documentation of packfile object schemas than what's currently out there

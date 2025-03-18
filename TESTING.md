@@ -1,3 +1,9 @@
+# Reading a zlib-compressed file
+
+```
+python3 -c "import sys, zlib; print(zlib.decompress(sys.stdin.buffer.read()).decode())" < <file_name>
+```
+
 # `git cat-file`
 
 ```

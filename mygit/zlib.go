@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/zlib"
 	"fmt"
 	"io"
@@ -37,4 +38,20 @@ func zlibDecompress(r io.Reader) ([]byte, error) {
 	}
 
 	return decompressed, nil
+}
+
+func zlibDecompressWithReadCount(r *bytes.Reader) ([]byte, int, error) {
+	zr, err := zlib.NewReader(r)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to initialize zlib reader: %s", err)
+	}
+	defer zr.Close()
+
+	decompressed, err := io.ReadAll(zr)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to decompress data with zlib: %s", err)
+	}
+
+	bytesRead := int(r.Size()) - r.Len()
+	return decompressed, bytesRead, nil
 }

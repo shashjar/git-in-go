@@ -7,14 +7,34 @@ import (
 	"fmt"
 )
 
+type PackfileObjectType int
+
 const (
-	PACKFILE_OBJ_COMMIT    = 1
-	PACKFILE_OBJ_TREE      = 2
-	PACKFILE_OBJ_BLOB      = 3
-	PACKFILE_OBJ_TAG       = 4
-	PACKFILE_OBJ_OFS_DELTA = 6
-	PACKFILE_OBJ_REF_DELTA = 7
+	PACKFILE_OBJ_COMMIT    PackfileObjectType = 1
+	PACKFILE_OBJ_TREE      PackfileObjectType = 2
+	PACKFILE_OBJ_BLOB      PackfileObjectType = 3
+	PACKFILE_OBJ_TAG       PackfileObjectType = 4
+	PACKFILE_OBJ_OFS_DELTA PackfileObjectType = 6
+	PACKFILE_OBJ_REF_DELTA PackfileObjectType = 7
 )
+
+func (pot *PackfileObjectType) toString() string {
+	if *pot == PACKFILE_OBJ_COMMIT {
+		return "commit"
+	} else if *pot == PACKFILE_OBJ_TREE {
+		return "tree"
+	} else if *pot == PACKFILE_OBJ_BLOB {
+		return "blob"
+	} else if *pot == PACKFILE_OBJ_TAG {
+		return "tag"
+	} else if *pot == PACKFILE_OBJ_OFS_DELTA {
+		return "ofs_delta"
+	} else if *pot == PACKFILE_OBJ_REF_DELTA {
+		return "ref_delta"
+	} else {
+		return "unknown"
+	}
+}
 
 func readPackfile(packfile []byte) error {
 	err := verifyPackfileChecksum(packfile)
@@ -26,7 +46,7 @@ func readPackfile(packfile []byte) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("numObjects:", numObjects)
+	fmt.Printf("numObjects: %d\n\n", numObjects)
 
 	err = readPackfileObjects(remainingPackfile, numObjects)
 	if err != nil {
@@ -62,12 +82,63 @@ func parsePackfileHeader(packfile []byte) (int, []byte, error) {
 	}
 
 	versionNumber := binary.BigEndian.Uint32(packfile[4:8])
-	if versionNumber != 2 && versionNumber != 3 {
-		return -1, nil, fmt.Errorf("unsupported packfile version number: expected 2 or 3, got %d", versionNumber)
+	if versionNumber != 2 {
+		return -1, nil, fmt.Errorf("unsupported packfile version number: expected 2, got %d", versionNumber)
 	}
 
 	numObjects := binary.BigEndian.Uint32(packfile[8:12])
 	return int(numObjects), packfile[12:], nil
+}
+
+func parsePackfileObjectTypeAndLength(data []byte) (PackfileObjectType, int, []byte, error) {
+	b := data[0]
+	shift := 4
+	packfileObjectType := PackfileObjectType((b >> shift) & 0x07)
+
+	// Only the rightmost 4 bits of the first byte are used for the variable length encoding, so passing shift as 4
+	packfileObjectLength, remainingData, err := parseVariableLengthEncoding(data, shift)
+	if err != nil {
+		return -1, -1, nil, err
+	}
+
+	return packfileObjectType, packfileObjectLength, remainingData, nil
+}
+
+func parseVariableLengthEncoding(data []byte, shift int) (int, []byte, error) {
+	b := data[0]
+	mask := byte((1 << shift) - 1)
+	packfileObjectLength := int(b & mask)
+	bytesRead := 1
+
+	for (b & 0x80) != 0 {
+		if bytesRead >= len(data) {
+			return -1, nil, fmt.Errorf("incomplete packfile object length")
+		}
+
+		b = data[bytesRead]
+		packfileObjectLength |= int(b&0x7F) << shift
+		shift += 7
+		bytesRead += 1
+	}
+
+	return packfileObjectLength, data[bytesRead:], nil
+}
+
+func decompressPackfileObject(data []byte, packfileObjectLength int) ([]byte, []byte, error) {
+	// TODO: is this logic correct?
+	decompressedObjData, compressedBytesRead, err := zlibDecompressWithReadCount(bytes.NewReader(data))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(decompressedObjData) != packfileObjectLength {
+		return nil, nil, fmt.Errorf("decompressed object data length mismatch: expected %d, got %d", packfileObjectLength, len(decompressedObjData))
+	}
+
+	fmt.Println("\ndecompressedObjData:\n", string(decompressedObjData))
+
+	remainingData := data[compressedBytesRead:]
+	return decompressedObjData, remainingData, nil
 }
 
 func readPackfileObjects(data []byte, numObjects int) error {
@@ -87,49 +158,70 @@ func readPackfileObject(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("\npackfileObjectType:", packfileObjectType)
-	fmt.Println("packfileObjectLength:", packfileObjectLength)
+	fmt.Printf("\nNext object type: %s\n", packfileObjectType.toString())
 
-	// TODO: this is still wrong - trying to decompress the wrong amount of data with zlib
-	decompressedObjData, err := zlibDecompress(bytes.NewReader(remainingData))
+	// TODO: skipping over ofs_delta and ref_delta objects for now
+	var objType string
+	switch packfileObjType := PackfileObjectType(packfileObjectType); packfileObjType {
+	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB, PACKFILE_OBJ_TAG: // TODO: make sure tag objects are correctly created/handled here
+		objType = packfileObjType.toString()
+	case PACKFILE_OBJ_OFS_DELTA:
+		remainingData, err = readOfsDeltaPackfileObject(remainingData, packfileObjectLength)
+		return remainingData, err
+	case PACKFILE_OBJ_REF_DELTA:
+		remainingData, err = readRefDeltaPackfileObject(remainingData, packfileObjectLength)
+		return remainingData, err
+	default:
+		return nil, fmt.Errorf("unsupported packfile object type: %d", packfileObjectType)
+	}
+
+	decompressedObjData, remainingData, err := decompressPackfileObject(remainingData, packfileObjectLength)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("decompressedObjData:\n", string(decompressedObjData))
 
-	switch packfileObjectType {
-	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB:
-		// These are valid, continue normally
-	case PACKFILE_OBJ_TAG: // TODO: tags not supported right now, but might want to add them
-		return nil, fmt.Errorf("unsupported packfile object type: tag")
-	case PACKFILE_OBJ_OFS_DELTA:
-		return nil, fmt.Errorf("unsupported packfile object type: ofs delta")
-	case PACKFILE_OBJ_REF_DELTA:
-		return nil, fmt.Errorf("unsupported packfile object type: ref delta")
-	default:
-		return nil, fmt.Errorf("unsupported packfile object type: %d", packfileObjectType)
+	objHash, err := createObjectFile(objType, decompressedObjData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create object file: %s", err)
+	}
+	fmt.Printf("Created %s object: %s\n", objType, objHash)
+
+	return remainingData, nil
+}
+
+// TODO: just skipping over the ofs_delta object for now
+func readOfsDeltaPackfileObject(data []byte, packfileObjectLength int) ([]byte, error) {
+	// TODO: ignoring the `offset` parsed by parseVariableLengthEncoding for now
+	// The rightmost 7 bits of the first byte are used for the variable length encoding, so passing shift as 7
+	_, remainingData, err := parseVariableLengthEncoding(data, 7)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: ignoring the `decompressedOfsDeltaObjData` returned here for now
+	_, remainingData, err = decompressPackfileObject(remainingData, packfileObjectLength)
+	if err != nil {
+		return nil, err
 	}
 
 	return remainingData, nil
 }
 
-func parsePackfileObjectTypeAndLength(data []byte) (int, int, []byte, error) {
-	b := data[0]
-	packfileObjectType := int((b >> 4) & 0x07)
-	packfileObjectLength := int(b & 0x0F)
-	shift := 4
-	bytesRead := 1
-
-	for (b & 0x80) != 0 {
-		if bytesRead >= len(data) {
-			return -1, -1, nil, fmt.Errorf("incomplete packfile object header")
-		}
-
-		b = data[bytesRead]
-		packfileObjectLength |= int(b&0x7F) << shift
-		shift += 7
-		bytesRead += 1
+// TODO: just skipping over the ref_delta object for now
+func readRefDeltaPackfileObject(data []byte, packfileObjectLength int) ([]byte, error) {
+	if len(data) < 20 {
+		return nil, fmt.Errorf("invalid ref_delta packfile object: too short to contain base object SHA")
 	}
 
-	return packfileObjectType, packfileObjectLength, data[bytesRead:], nil
+	baseObjSHA := fmt.Sprintf("%x", data[:20])
+	remainingData := data[20:]
+	fmt.Println("Base object SHA:", baseObjSHA)
+
+	// TODO: ignoring the `decompressedRefDeltaObjData` returned here for now
+	_, remainingData, err := decompressPackfileObject(remainingData, packfileObjectLength)
+	if err != nil {
+		return nil, err
+	}
+
+	return remainingData, nil
 }
