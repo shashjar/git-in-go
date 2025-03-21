@@ -49,5 +49,5 @@ echo "hello world" > test.txt
 # `git clone`
 
 ```
-./run.sh clone https://github.com/shashjar/redis-in-go cloned-repo
+./run.sh clone https://github.com/shashjar/redis-in-go cloned-redis-in-go
 ```

@@ -5,25 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 func initHandler() {
-	for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
-		if err := os.MkdirAll(REPO_DIR+dir, 0755); err != nil {
-			log.Fatalf("Error creating directory: %s\n", err)
-		}
-	}
-
-	headFileContents := []byte("ref: refs/heads/master\n")
-	if err := os.WriteFile(REPO_DIR+".git/HEAD", headFileContents, 0644); err != nil {
-		log.Fatalf("Error writing HEAD file: %s\n", err)
-	}
-
-	absPath, err := filepath.Abs(REPO_DIR + ".git")
+	absPath, err := initRepo(REPO_DIR)
 	if err != nil {
-		log.Fatalf("Error getting absolute path of Git repository: %s\n", err)
+		log.Fatalf("Error initializing Git repository: %s\n", err)
 	}
 	log.Printf("Initialized empty Git repository in %s\n", absPath)
 }
@@ -39,7 +27,7 @@ func catFileHandler() {
 		log.Fatalf("Invalid object hash: %s\n", objHash)
 	}
 
-	obj, err := getObject(objHash)
+	obj, err := getObject(objHash, REPO_DIR)
 	if err != nil {
 		log.Fatalf("Could not read object file: %s\n", err)
 	}
@@ -63,7 +51,7 @@ func hashObjectHandler() {
 	}
 
 	filePath := os.Args[3]
-	blobObj, err := createBlobObjectFromFile(REPO_DIR + filePath)
+	blobObj, err := createBlobObjectFromFile(REPO_DIR+filePath, REPO_DIR)
 	if err != nil {
 		log.Fatalf("Could not create blob object from file: %s\n", err)
 	}
@@ -86,7 +74,7 @@ func lsTreeHandler() {
 		log.Fatalf("Invalid object hash: %s\n", treeHash)
 	}
 
-	treeObj, err := readTreeObjectFile(treeHash)
+	treeObj, err := readTreeObjectFile(treeHash, REPO_DIR)
 	if err != nil {
 		log.Fatalf("Could not read tree object file: %s\n", err)
 	}
@@ -102,7 +90,7 @@ func writeTreeHandler() {
 		log.Fatal("Usage: write-tree")
 	}
 
-	treeObj, err := createTreeObjectFromDirectory(REPO_DIR)
+	treeObj, err := createTreeObjectFromDirectory(REPO_DIR, REPO_DIR)
 	if err != nil {
 		log.Fatalf("Could not create tree object for directory: %s\n", err)
 	}
@@ -134,7 +122,7 @@ func commitTreeHandler() {
 		parentCommitHashes = append(parentCommitHashes, *parentCommitHashPtr)
 	}
 
-	commitObj, err := createCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr)
+	commitObj, err := createCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr, REPO_DIR)
 	if err != nil {
 		log.Fatalf("Could not create commit object from tree: %s\n", err)
 	}
@@ -154,13 +142,17 @@ func cloneHandler() {
 		log.Fatalf("Failed to validate structure of repository URL: %s\n", err)
 	}
 
-	var dir string
+	var repoDir string
 	if len(os.Args) == 4 {
-		dir = os.Args[3]
+		repoDir = os.Args[3]
 	} else {
 		repoURLParts := strings.Split(repoURL, "/")
-		dir = repoURLParts[len(repoURLParts)-1]
+		repoDir = repoURLParts[len(repoURLParts)-1]
 	}
 
-	cloneRepoIntoDir(repoURL, dir)
+	if !strings.HasSuffix(repoDir, "/") {
+		repoDir = repoDir + "/"
+	}
+
+	cloneRepo(repoURL, repoDir)
 }

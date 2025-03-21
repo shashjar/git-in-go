@@ -6,12 +6,23 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 )
 
 // TODO: implement
-func cloneRepoIntoDir(repoURL string, dir string) {
+func cloneRepo(repoURL string, repoDir string) {
+	err := os.MkdirAll(repoDir, 0755)
+	if err != nil {
+		log.Fatalf("Failed to create repository directory: %s\n", err)
+	}
+
+	_, err = initRepo(repoDir)
+	if err != nil {
+		log.Fatalf("Failed to initialize repository: %s\n", err)
+	}
+
 	refsPktLines, err := refDiscovery(repoURL)
 	if err != nil {
 		log.Fatalf("Failed to perform reference discovery on the remote repository: %s\n", err)
@@ -22,15 +33,10 @@ func cloneRepoIntoDir(repoURL string, dir string) {
 		log.Fatalf("Failed to perform git-upload-pack request: %s\n", err)
 	}
 
-	err = readPackfile(packfile)
+	err = readPackfile(packfile, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to read packfile: %s\n", err)
 	}
-
-	// err = os.Mkdir(dir, 0755)
-	// if err != nil {
-	// 	log.Fatalf("Failed to create repository directory: %s\n", err)
-	// }
 }
 
 func refDiscovery(repoURL string) ([]string, error) {

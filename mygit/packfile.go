@@ -39,7 +39,7 @@ func (pot *PackfileObjectType) toString() string {
 }
 
 // TODO: should I be using the index file to help parse the packfile?
-func readPackfile(packfile []byte) error {
+func readPackfile(packfile []byte, repoDir string) error {
 	err := verifyPackfileChecksum(packfile)
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func readPackfile(packfile []byte) error {
 	}
 	fmt.Printf("numObjects: %d\n\n", numObjects)
 
-	err = readPackfileObjects(remainingPackfile, numObjects)
+	err = readPackfileObjects(remainingPackfile, numObjects, repoDir)
 	if err != nil {
 		return err
 	}
@@ -143,11 +143,11 @@ func decompressPackfileObject(data []byte, packfileObjectLength int) ([]byte, []
 	return decompressedObjData, remainingData, nil
 }
 
-func readPackfileObjects(data []byte, numObjects int) error {
+func readPackfileObjects(data []byte, numObjects int, repoDir string) error {
 	remainingData := data
 	var err error
 	for range numObjects {
-		remainingData, err = readPackfileObject(remainingData)
+		remainingData, err = readPackfileObject(remainingData, repoDir)
 		if err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ func readPackfileObjects(data []byte, numObjects int) error {
 	return nil
 }
 
-func readPackfileObject(data []byte) ([]byte, error) {
+func readPackfileObject(data []byte, repoDir string) ([]byte, error) {
 	packfileObjectType, packfileObjectLength, remainingData, err := readPackfileObjectHeader(data)
 	if err != nil {
 		return nil, err
@@ -189,7 +189,7 @@ func readPackfileObject(data []byte) ([]byte, error) {
 	}
 	fmt.Println("decompressedObjData:\n", string(decompressedObjData))
 
-	objHash, err := createObjectFile(objType, decompressedObjData)
+	objHash, err := createObjectFile(objType, decompressedObjData, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create object file: %s", err)
 	}

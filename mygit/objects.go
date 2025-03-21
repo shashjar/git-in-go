@@ -169,8 +169,8 @@ func isValidMode(mode int) bool {
 	return slices.Contains(VALID_MODES, mode)
 }
 
-func getObjectType(objHash string) (ObjectType, error) {
-	data, err := readObjectFile(objHash)
+func getObjectType(objHash string, repoDir string) (ObjectType, error) {
+	data, err := readObjectFile(objHash, repoDir)
 	if err != nil {
 		return -1, err
 	}
@@ -204,8 +204,8 @@ func getObjectTypeFromMode(mode int) ObjectType {
 	}
 }
 
-func getObject(objHash string) (GitObject, error) {
-	objType, err := getObjectType(objHash)
+func getObject(objHash string, repoDir string) (GitObject, error) {
+	objType, err := getObjectType(objHash, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -213,19 +213,19 @@ func getObject(objHash string) (GitObject, error) {
 	var gitObj GitObject
 	switch objType {
 	case Blob:
-		blobObj, err := readBlobObjectFile(objHash)
+		blobObj, err := readBlobObjectFile(objHash, repoDir)
 		if err != nil {
 			return nil, err
 		}
 		gitObj = blobObj
 	case Tree:
-		treeObj, err := readTreeObjectFile(objHash)
+		treeObj, err := readTreeObjectFile(objHash, repoDir)
 		if err != nil {
 			return nil, err
 		}
 		gitObj = treeObj
 	case Commit:
-		commitObj, err := readCommitObjectFile(objHash)
+		commitObj, err := readCommitObjectFile(objHash, repoDir)
 		if err != nil {
 			return nil, err
 		}
@@ -237,8 +237,8 @@ func getObject(objHash string) (GitObject, error) {
 	return gitObj, nil
 }
 
-func readObjectFile(objHash string) ([]byte, error) {
-	objPath := REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
+func readObjectFile(objHash string, repoDir string) ([]byte, error) {
+	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
 	file, err := os.Open(objPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open object file")
@@ -253,7 +253,7 @@ func readObjectFile(objHash string) ([]byte, error) {
 	return data, nil
 }
 
-func createObjectFile(objType string, contentBytes []byte) (string, error) {
+func createObjectFile(objType string, contentBytes []byte, repoDir string) (string, error) {
 	sizeBytes := len(contentBytes)
 	header := fmt.Sprintf("%s %d\x00", objType, sizeBytes)
 	headerBytes := []byte(header)
@@ -268,7 +268,7 @@ func createObjectFile(objType string, contentBytes []byte) (string, error) {
 	objHashBytes := sha1.Sum(fileBytes)
 	objHash := hex.EncodeToString(objHashBytes[:])
 
-	objPath := REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
+	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
 
 	dir := filepath.Dir(objPath)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
@@ -305,8 +305,8 @@ func parseCommitUser(s string) (*CommitUser, error) {
 
 /** BLOBS */
 
-func readBlobObjectFile(objHash string) (*BlobObject, error) {
-	data, err := readObjectFile(objHash)
+func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
+	data, err := readObjectFile(objHash, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ func readBlobObjectFile(objHash string) (*BlobObject, error) {
 	}, nil
 }
 
-func createBlobObjectFromFile(filePath string) (*BlobObject, error) {
+func createBlobObjectFromFile(filePath string, repoDir string) (*BlobObject, error) {
 	contentBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file")
@@ -346,7 +346,7 @@ func createBlobObjectFromFile(filePath string) (*BlobObject, error) {
 	content := string(contentBytes)
 	sizeBytes := len(contentBytes)
 
-	blobObjHash, err := createObjectFile("blob", contentBytes)
+	blobObjHash, err := createObjectFile("blob", contentBytes, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -395,8 +395,8 @@ func parseTreeObjectEntry(entryHeader string, entryHash string) (*TreeObjectEntr
 	}, nil
 }
 
-func readTreeObjectFile(objHash string) (*TreeObject, error) {
-	data, err := readObjectFile(objHash)
+func readTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
+	data, err := readObjectFile(objHash, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +452,7 @@ func readTreeObjectFile(objHash string) (*TreeObject, error) {
 	}, nil
 }
 
-func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
+func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, error) {
 	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
 		log.Fatalf("Could not read contents of directory")
@@ -467,7 +467,7 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 		fullPath := filepath.Join(dir, dirEntry.Name())
 
 		if dirEntry.IsDir() {
-			subDirTreeObj, err := createTreeObjectFromDirectory(fullPath)
+			subDirTreeObj, err := createTreeObjectFromDirectory(fullPath, repoDir)
 			if err != nil {
 				return nil, err
 			}
@@ -492,7 +492,7 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 				mode = REGULAR_FILE_MODE
 			}
 
-			fileBlobObj, err := createBlobObjectFromFile(fullPath)
+			fileBlobObj, err := createBlobObjectFromFile(fullPath, repoDir)
 			if err != nil {
 				return nil, err
 			}
@@ -516,7 +516,7 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 	contentBytes := []byte(contentBuilder.String())
 	sizeBytes := len(contentBytes)
 
-	treeObjHash, err := createObjectFile("tree", contentBytes)
+	treeObjHash, err := createObjectFile("tree", contentBytes, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +531,7 @@ func createTreeObjectFromDirectory(dir string) (*TreeObject, error) {
 /** COMMITS */
 
 // TODO: my commit object file format may not match Git's exactly - I added newline characters here to make parsing easier
-func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string) (*CommitObject, error) {
+func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string, repoDir string) (*CommitObject, error) {
 	var contentBuilder strings.Builder
 	fmt.Fprintf(&contentBuilder, "tree %s\n", treeHash)
 
@@ -559,7 +559,7 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 
 	contentBytes := []byte(contentBuilder.String())
 	sizeBytes := len(contentBytes)
-	commitObjHash, err := createObjectFile("commit", contentBytes)
+	commitObjHash, err := createObjectFile("commit", contentBytes, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -575,8 +575,8 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 	}, nil
 }
 
-func readCommitObjectFile(objHash string) (*CommitObject, error) {
-	data, err := readObjectFile(objHash)
+func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error) {
+	data, err := readObjectFile(objHash, repoDir)
 	if err != nil {
 		return nil, err
 	}
