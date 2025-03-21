@@ -40,7 +40,8 @@ func zlibDecompress(r io.Reader) ([]byte, error) {
 	return decompressed, nil
 }
 
-func zlibDecompressWithReadCount(r *bytes.Reader) ([]byte, int, error) {
+func zlibDecompressWithReadCount(b []byte) ([]byte, int, error) {
+	r := bytes.NewReader(b)
 	zr, err := zlib.NewReader(r)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to initialize zlib reader: %s", err)

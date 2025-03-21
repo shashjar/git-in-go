@@ -7,6 +7,8 @@ import (
 	"fmt"
 )
 
+const PACKFILE_CHECKSUM_LENGTH = 20
+
 type PackfileObjectType int
 
 const (
@@ -36,13 +38,15 @@ func (pot *PackfileObjectType) toString() string {
 	}
 }
 
+// TODO: should I be using the index file to help parse the packfile?
 func readPackfile(packfile []byte) error {
 	err := verifyPackfileChecksum(packfile)
 	if err != nil {
 		return err
 	}
+	packfile = packfile[:len(packfile)-PACKFILE_CHECKSUM_LENGTH]
 
-	numObjects, remainingPackfile, err := parsePackfileHeader(packfile)
+	numObjects, remainingPackfile, err := readPackfileHeader(packfile)
 	if err != nil {
 		return err
 	}
@@ -57,12 +61,12 @@ func readPackfile(packfile []byte) error {
 }
 
 func verifyPackfileChecksum(packfile []byte) error {
-	if len(packfile) < 20 {
+	if len(packfile) < PACKFILE_CHECKSUM_LENGTH {
 		return fmt.Errorf("invalid packfile: too short to contain a checksum")
 	}
 
-	expectedChecksum := packfile[len(packfile)-20:]
-	actualChecksum := sha1.Sum(packfile[:len(packfile)-20])
+	expectedChecksum := packfile[len(packfile)-PACKFILE_CHECKSUM_LENGTH:]
+	actualChecksum := sha1.Sum(packfile[:len(packfile)-PACKFILE_CHECKSUM_LENGTH])
 
 	if !bytes.Equal(expectedChecksum, actualChecksum[:]) {
 		return fmt.Errorf("invalid packfile: actual checksum does not match expected checksum")
@@ -71,7 +75,7 @@ func verifyPackfileChecksum(packfile []byte) error {
 	return nil
 }
 
-func parsePackfileHeader(packfile []byte) (int, []byte, error) {
+func readPackfileHeader(packfile []byte) (int, []byte, error) {
 	if len(packfile) < 4 {
 		return -1, nil, fmt.Errorf("invalid packfile: too short to contain a header")
 	}
@@ -90,13 +94,13 @@ func parsePackfileHeader(packfile []byte) (int, []byte, error) {
 	return int(numObjects), packfile[12:], nil
 }
 
-func parsePackfileObjectTypeAndLength(data []byte) (PackfileObjectType, int, []byte, error) {
+func readPackfileObjectHeader(data []byte) (PackfileObjectType, int, []byte, error) {
 	b := data[0]
 	shift := 4
 	packfileObjectType := PackfileObjectType((b >> shift) & 0x07)
 
 	// Only the rightmost 4 bits of the first byte are used for the variable length encoding, so passing shift as 4
-	packfileObjectLength, remainingData, err := parseVariableLengthEncoding(data, shift)
+	packfileObjectLength, remainingData, err := readVariableLengthEncoding(data, shift)
 	if err != nil {
 		return -1, -1, nil, err
 	}
@@ -104,7 +108,7 @@ func parsePackfileObjectTypeAndLength(data []byte) (PackfileObjectType, int, []b
 	return packfileObjectType, packfileObjectLength, remainingData, nil
 }
 
-func parseVariableLengthEncoding(data []byte, shift int) (int, []byte, error) {
+func readVariableLengthEncoding(data []byte, shift int) (int, []byte, error) {
 	b := data[0]
 	mask := byte((1 << shift) - 1)
 	packfileObjectLength := int(b & mask)
@@ -126,7 +130,7 @@ func parseVariableLengthEncoding(data []byte, shift int) (int, []byte, error) {
 
 func decompressPackfileObject(data []byte, packfileObjectLength int) ([]byte, []byte, error) {
 	// TODO: is this logic correct?
-	decompressedObjData, compressedBytesRead, err := zlibDecompressWithReadCount(bytes.NewReader(data))
+	decompressedObjData, compressedBytesRead, err := zlibDecompressWithReadCount(data)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,8 +138,6 @@ func decompressPackfileObject(data []byte, packfileObjectLength int) ([]byte, []
 	if len(decompressedObjData) != packfileObjectLength {
 		return nil, nil, fmt.Errorf("decompressed object data length mismatch: expected %d, got %d", packfileObjectLength, len(decompressedObjData))
 	}
-
-	fmt.Println("\ndecompressedObjData:\n", string(decompressedObjData))
 
 	remainingData := data[compressedBytesRead:]
 	return decompressedObjData, remainingData, nil
@@ -150,15 +152,21 @@ func readPackfileObjects(data []byte, numObjects int) error {
 			return err
 		}
 	}
+
+	if len(remainingData) != 0 {
+		return fmt.Errorf("leftover data in packfile after reading all expected objects")
+	}
+
 	return nil
 }
 
 func readPackfileObject(data []byte) ([]byte, error) {
-	packfileObjectType, packfileObjectLength, remainingData, err := parsePackfileObjectTypeAndLength(data)
+	packfileObjectType, packfileObjectLength, remainingData, err := readPackfileObjectHeader(data)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Printf("\nNext object type: %s\n", packfileObjectType.toString())
+	fmt.Printf("Object length (decompressed): %d\n", packfileObjectLength)
 
 	// TODO: skipping over ofs_delta and ref_delta objects for now
 	var objType string
@@ -179,21 +187,22 @@ func readPackfileObject(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("decompressedObjData:\n", string(decompressedObjData))
 
 	objHash, err := createObjectFile(objType, decompressedObjData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create object file: %s", err)
 	}
-	fmt.Printf("Created %s object: %s\n", objType, objHash)
+	fmt.Printf("Created %s object: %s\n\n", objType, objHash)
 
 	return remainingData, nil
 }
 
 // TODO: just skipping over the ofs_delta object for now
 func readOfsDeltaPackfileObject(data []byte, packfileObjectLength int) ([]byte, error) {
-	// TODO: ignoring the `offset` parsed by parseVariableLengthEncoding for now
+	// TODO: ignoring the `offset` parsed by readVariableLengthEncoding for now
 	// The rightmost 7 bits of the first byte are used for the variable length encoding, so passing shift as 7
-	_, remainingData, err := parseVariableLengthEncoding(data, 7)
+	_, remainingData, err := readVariableLengthEncoding(data, 7)
 	if err != nil {
 		return nil, err
 	}

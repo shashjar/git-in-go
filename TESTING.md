@@ -4,6 +4,12 @@
 python3 -c "import sys, zlib; print(zlib.decompress(sys.stdin.buffer.read()).decode())" < <file_name>
 ```
 
+# `git init`
+
+```
+./run.sh init
+```
+
 # `git cat-file`
 
 ```
@@ -38,4 +44,10 @@ Then use the outputted tree hash with
 echo "hello world" > test.txt
 ./run.sh write-tree
 ./run.sh commit-tree f5e9585a3f08476bd248b12e64230900c21baace -m "Initial commit"
+```
+
+# `git clone`
+
+```
+./run.sh clone https://github.com/shashjar/redis-in-go cloned-repo
 ```

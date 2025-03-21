@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
@@ -16,7 +17,10 @@ import (
 	"time"
 )
 
-const OBJECT_HASH_LENGTH = 40
+const (
+	OBJECT_HASH_LENGTH_STRING = 40
+	OBJECT_HASH_LENGTH_BYTES  = 20
+)
 
 type ObjectType int
 
@@ -153,7 +157,7 @@ func (c *CommitObject) PrettyPrint() string {
 /** GENERIC TO ALL OBJECTS */
 
 func isValidObjectHash(objHash string) bool {
-	if len(objHash) != OBJECT_HASH_LENGTH {
+	if len(objHash) != OBJECT_HASH_LENGTH_STRING {
 		return false
 	}
 
@@ -250,12 +254,18 @@ func readObjectFile(objHash string) ([]byte, error) {
 }
 
 func createObjectFile(objType string, contentBytes []byte) (string, error) {
-	content := string(contentBytes)
 	sizeBytes := len(contentBytes)
+	header := fmt.Sprintf("%s %d\x00", objType, sizeBytes)
+	headerBytes := []byte(header)
 
-	objFileContent := fmt.Sprintf("%s %d\x00%s", objType, sizeBytes, content)
-	objFileContentBytes := []byte(objFileContent)
-	objHashBytes := sha1.Sum(objFileContentBytes)
+	fileBytes := make([]byte, len(headerBytes)+len(contentBytes))
+	copy(fileBytes, headerBytes)
+	copy(fileBytes[len(headerBytes):], contentBytes)
+
+	fmt.Printf("DEBUG: Header size: %d bytes, Content size: %d bytes, Total size: %d bytes\n",
+		len(headerBytes), len(contentBytes), len(fileBytes))
+
+	objHashBytes := sha1.Sum(fileBytes)
 	objHash := hex.EncodeToString(objHashBytes[:])
 
 	objPath := REPO_DIR + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
@@ -271,7 +281,7 @@ func createObjectFile(objType string, contentBytes []byte) (string, error) {
 	}
 	defer objFile.Close()
 
-	err = zlibCompress(objFile, objFileContentBytes)
+	err = zlibCompress(objFile, fileBytes)
 	if err != nil {
 		return "", err
 	}
@@ -362,19 +372,19 @@ func (e *TreeObjectEntry) toString(nameOnly bool) string {
 func parseTreeObjectEntry(entryHeader string, entryHash string) (*TreeObjectEntry, error) {
 	entryHeaderParts := strings.Split(entryHeader, " ")
 	if len(entryHeaderParts) != 2 {
-		return nil, fmt.Errorf("entry mode and name should be space-separated")
+		return nil, fmt.Errorf("tree object entry mode and name should be space-separated")
 	}
 
 	mode, err := strconv.Atoi(entryHeaderParts[0])
 	if err != nil {
-		return nil, fmt.Errorf("entry mode should be an integer")
+		return nil, fmt.Errorf("tree object entry mode should be an integer")
 	}
 	if !isValidMode(mode) {
-		return nil, fmt.Errorf("invalid entry mode: %d", mode)
+		return nil, fmt.Errorf("invalid tree object entry mode: %d", mode)
 	}
 
 	if !isValidObjectHash(entryHash) {
-		return nil, fmt.Errorf("invalid entry object hash: %s", entryHash)
+		return nil, fmt.Errorf("invalid tree object entry hash: %s", entryHash)
 	}
 
 	return &TreeObjectEntry{
@@ -391,35 +401,45 @@ func readTreeObjectFile(objHash string) (*TreeObject, error) {
 		return nil, err
 	}
 
-	parts := strings.Split(string(data), "\x00")
-
-	headerParts := strings.Split(parts[0], " ")
-	if len(headerParts) != 2 {
-		return nil, fmt.Errorf("object file poorly formatted - header parts should be space-separated")
+	nullByteIndex := bytes.IndexByte(data, 0)
+	if nullByteIndex == -1 {
+		return nil, fmt.Errorf("object file poorly formatted: missing null byte separator")
 	}
 
-	if headerParts[0] != "tree" {
-		return nil, fmt.Errorf("object file poorly formatted - header does not start with 'tree'")
+	header := string(data[:nullByteIndex])
+	headerParts := strings.Split(header, " ")
+	if len(headerParts) != 2 || headerParts[0] != "tree" {
+		return nil, fmt.Errorf("invalid tree object header: %s", header)
 	}
+
 	sizeBytes, err := strconv.Atoi(headerParts[1])
 	if err != nil {
-		return nil, fmt.Errorf("object file poorly formatted - size is not an integer")
+		return nil, fmt.Errorf("invalid size in tree object header: %s", err)
 	}
 
+	content := data[nullByteIndex+1:]
 	entries := []TreeObjectEntry{}
-	for i := 1; i < len(parts)-1; i++ {
-		var entryHeader string
-		if i == 1 {
-			entryHeader = parts[i]
-		} else {
-			entryHeader = parts[i][OBJECT_HASH_LENGTH:]
+	i := 0
+	for i < len(content) {
+		nullByteIndex := bytes.IndexByte(content[i:], 0)
+		if nullByteIndex == -1 {
+			return nil, fmt.Errorf("invalid tree object entry: missing null byte separator")
 		}
 
-		entry, err := parseTreeObjectEntry(entryHeader, parts[i+1][:OBJECT_HASH_LENGTH])
+		entryHeader := string(content[i : i+nullByteIndex])
+		entryHashStartIndex := i + nullByteIndex + 1
+		if entryHashStartIndex+OBJECT_HASH_LENGTH_BYTES > len(content) {
+			return nil, fmt.Errorf("invalid tree object entry: not long enough to contain SHA hash")
+		}
+		entryHash := fmt.Sprintf("%x", content[entryHashStartIndex:entryHashStartIndex+OBJECT_HASH_LENGTH_BYTES])
+
+		entry, err := parseTreeObjectEntry(entryHeader, entryHash)
 		if err != nil {
 			return nil, err
 		}
 		entries = append(entries, *entry)
+
+		i = entryHashStartIndex + OBJECT_HASH_LENGTH_BYTES
 	}
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].name < entries[j].name
