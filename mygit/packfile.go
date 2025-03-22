@@ -50,7 +50,6 @@ func readPackfile(packfile []byte, repoDir string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("numObjects: %d\n\n", numObjects)
 
 	err = readPackfileObjects(remainingPackfile, numObjects, repoDir)
 	if err != nil {
@@ -164,8 +163,6 @@ func readPackfileObject(data []byte, repoDir string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("\nNext object type: %s\n", packfileObjectType.toString())
-	fmt.Printf("Object length (decompressed): %d\n", packfileObjectLength)
 
 	// TODO: skipping over ofs_delta and ref_delta objects for now
 	var objTypeStr string
@@ -186,18 +183,16 @@ func readPackfileObject(data []byte, repoDir string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("decompressedObjData:\n", string(decompressedObjData))
 
 	objType, err := objTypeFromString(objTypeStr)
 	if err != nil {
 		return nil, err
 	}
 
-	objHash, err := createObjectFile(objType, decompressedObjData, repoDir)
+	_, err = createObjectFile(objType, decompressedObjData, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create object file: %s", err)
 	}
-	fmt.Printf("Created %s object: %s\n\n", objTypeStr, objHash)
 
 	return remainingData, nil
 }
@@ -226,9 +221,8 @@ func readRefDeltaPackfileObject(data []byte, packfileObjectLength int) ([]byte, 
 		return nil, fmt.Errorf("invalid ref_delta packfile object: too short to contain base object SHA")
 	}
 
-	baseObjSHA := fmt.Sprintf("%x", data[:20])
+	// baseObjSHA := fmt.Sprintf("%x", data[:20])
 	remainingData := data[20:]
-	fmt.Println("Base object SHA:", baseObjSHA)
 
 	// TODO: ignoring the `decompressedRefDeltaObjData` returned here for now
 	_, remainingData, err := decompressPackfileObject(remainingData, packfileObjectLength)

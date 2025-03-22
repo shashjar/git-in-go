@@ -11,7 +11,6 @@ import (
 	"strings"
 )
 
-// TODO: implement
 func cloneRepo(repoURL string, repoDir string) {
 	err := os.MkdirAll(repoDir, 0755)
 	if err != nil {
@@ -28,7 +27,7 @@ func cloneRepo(repoURL string, repoDir string) {
 		log.Fatalf("Failed to perform reference discovery on the remote repository: %s\n", err)
 	}
 
-	packfile, err := uploadPackRequest(repoURL, refsPktLines)
+	packfile, headHash, err := uploadPackRequest(repoURL, refsPktLines)
 	if err != nil {
 		log.Fatalf("Failed to perform git-upload-pack request: %s\n", err)
 	}
@@ -36,6 +35,11 @@ func cloneRepo(repoURL string, repoDir string) {
 	err = readPackfile(packfile, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to read packfile: %s\n", err)
+	}
+
+	err = checkoutCommit(headHash, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to check out HEAD commit: %s\n", err)
 	}
 }
 
@@ -71,7 +75,7 @@ func refDiscovery(repoURL string) ([]string, error) {
 	return refsPktLines, nil
 }
 
-func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, error) {
+func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, string, error) {
 	var headHash string
 	for _, refPktLine := range refsPktLines {
 		if len(refPktLine) > 45 && refPktLine[41:45] == "HEAD" {
@@ -79,7 +83,10 @@ func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, error) {
 		}
 	}
 	if headHash == "" {
-		return nil, fmt.Errorf("refs in remote repository do not contain SHA hash for HEAD")
+		return nil, "", fmt.Errorf("refs in remote repository do not contain SHA hash for HEAD")
+	}
+	if !isValidObjectHash(headHash) {
+		return nil, "", fmt.Errorf("refs in remote repository contained invalid SHA hash for HEAD: %s", headHash)
 	}
 
 	capabilities := "multi_ack ofs-delta thin-pack include-tag" // TODO: could maybe add a progress bar for cloning
@@ -88,22 +95,22 @@ func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, error) {
 	uploadPackRequestBody := createPktLineStream([]string{uploadPackPktLine}) + donePktLine
 	uploadPackResp, err := http.Post(repoURL+"/git-upload-pack", "application/x-git-upload-pack-request", strings.NewReader(uploadPackRequestBody))
 	if err != nil {
-		return nil, fmt.Errorf("git-upload-pack request failed: %s", err)
+		return nil, "", fmt.Errorf("git-upload-pack request failed: %s", err)
 	}
 	if uploadPackResp.StatusCode != 200 {
-		return nil, fmt.Errorf("received invalid response status code %s for git-upload-pack request", uploadPackResp.Status)
+		return nil, "", fmt.Errorf("received invalid response status code %s for git-upload-pack request", uploadPackResp.Status)
 	}
 	defer uploadPackResp.Body.Close()
 
 	uploadPackBody, err := io.ReadAll(uploadPackResp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read git-upload-pack response: %s", err)
+		return nil, "", fmt.Errorf("failed to read git-upload-pack response: %s", err)
 	}
 
 	nakLine, err := readPktLine(bytes.NewReader(uploadPackBody))
 	if err != nil || nakLine != "NAK" {
-		return nil, fmt.Errorf("expected NAK in git-upload-pack response")
+		return nil, "", fmt.Errorf("expected NAK in git-upload-pack response")
 	}
 
-	return uploadPackBody[8:], nil
+	return uploadPackBody[8:], headHash, nil
 }
