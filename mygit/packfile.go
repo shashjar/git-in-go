@@ -129,7 +129,6 @@ func readVariableLengthEncoding(data []byte, shift int) (int, []byte, error) {
 }
 
 func decompressPackfileObject(data []byte, packfileObjectLength int) ([]byte, []byte, error) {
-	// TODO: is this logic correct?
 	decompressedObjData, compressedBytesRead, err := zlibDecompressWithReadCount(data)
 	if err != nil {
 		return nil, nil, err
@@ -169,10 +168,10 @@ func readPackfileObject(data []byte, repoDir string) ([]byte, error) {
 	fmt.Printf("Object length (decompressed): %d\n", packfileObjectLength)
 
 	// TODO: skipping over ofs_delta and ref_delta objects for now
-	var objType string
+	var objTypeStr string
 	switch packfileObjType := PackfileObjectType(packfileObjectType); packfileObjType {
 	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB, PACKFILE_OBJ_TAG: // TODO: make sure tag objects are correctly created/handled here
-		objType = packfileObjType.toString()
+		objTypeStr = packfileObjType.toString()
 	case PACKFILE_OBJ_OFS_DELTA:
 		remainingData, err = readOfsDeltaPackfileObject(remainingData, packfileObjectLength)
 		return remainingData, err
@@ -189,11 +188,16 @@ func readPackfileObject(data []byte, repoDir string) ([]byte, error) {
 	}
 	fmt.Println("decompressedObjData:\n", string(decompressedObjData))
 
+	objType, err := objTypeFromString(objTypeStr)
+	if err != nil {
+		return nil, err
+	}
+
 	objHash, err := createObjectFile(objType, decompressedObjData, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create object file: %s", err)
 	}
-	fmt.Printf("Created %s object: %s\n\n", objType, objHash)
+	fmt.Printf("Created %s object: %s\n\n", objTypeStr, objHash)
 
 	return remainingData, nil
 }

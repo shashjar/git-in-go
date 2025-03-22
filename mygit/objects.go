@@ -30,15 +30,27 @@ const (
 	Commit                   // 2
 )
 
-func (ot *ObjectType) toString() string {
-	if *ot == Blob {
+func (ot ObjectType) toString() string {
+	if ot == Blob {
 		return "blob"
-	} else if *ot == Tree {
+	} else if ot == Tree {
 		return "tree"
-	} else if *ot == Commit {
+	} else if ot == Commit {
 		return "commit"
 	} else {
 		return "unknown"
+	}
+}
+
+func objTypeFromString(objType string) (ObjectType, error) {
+	if objType == Blob.toString() {
+		return Blob, nil
+	} else if objType == Tree.toString() {
+		return Tree, nil
+	} else if objType == Commit.toString() {
+		return Commit, nil
+	} else {
+		return -1, fmt.Errorf("unknown object type %s", objType)
 	}
 }
 
@@ -67,7 +79,7 @@ type GitObject interface {
 type BlobObject struct {
 	hash      string
 	sizeBytes int
-	content   string
+	content   []byte
 }
 
 func (b *BlobObject) GetObjectType() ObjectType {
@@ -79,7 +91,7 @@ func (b *BlobObject) GetSizeBytes() int {
 }
 
 func (b *BlobObject) PrettyPrint() string {
-	return fmt.Sprintf("blob %d\n%s", b.sizeBytes, b.content)
+	return fmt.Sprintf("blob %d\n%s", b.sizeBytes, string(b.content))
 }
 
 // Represents a Git tree object, which stores a directory structure
@@ -170,30 +182,17 @@ func isValidMode(mode int) bool {
 }
 
 func getObjectType(objHash string, repoDir string) (ObjectType, error) {
-	data, err := readObjectFile(objHash, repoDir)
+	headerObjType, _, _, err := readObjectFile(objHash, repoDir)
 	if err != nil {
 		return -1, err
 	}
 
-	parts := strings.SplitN(string(data), "\x00", 2)
-	if len(parts) != 2 {
-		return -1, fmt.Errorf("object file poorly formatted - header and contents should be separated by null byte")
+	objType, err := objTypeFromString(headerObjType)
+	if err != nil {
+		return -1, err
 	}
 
-	headerParts := strings.Split(parts[0], " ")
-	if len(headerParts) != 2 {
-		return -1, fmt.Errorf("object file poorly formatted - header parts should be space-separated")
-	}
-
-	if headerParts[0] == "blob" {
-		return Blob, nil
-	} else if headerParts[0] == "tree" {
-		return Tree, nil
-	} else if headerParts[0] == "commit" {
-		return Commit, nil
-	} else {
-		return -1, fmt.Errorf("unknown object type %s", headerParts[0])
-	}
+	return objType, nil
 }
 
 func getObjectTypeFromMode(mode int) ObjectType {
@@ -237,33 +236,49 @@ func getObject(objHash string, repoDir string) (GitObject, error) {
 	return gitObj, nil
 }
 
-func readObjectFile(objHash string, repoDir string) ([]byte, error) {
+func readObjectFile(objHash string, repoDir string) (string, int, []byte, error) {
 	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
 	file, err := os.Open(objPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open object file")
+		return "", -1, nil, fmt.Errorf("failed to open object file")
 	}
 	defer file.Close()
 
 	data, err := zlibDecompress(file)
 	if err != nil {
-		return nil, err
+		return "", -1, nil, err
 	}
 
-	return data, nil
+	nullByteIndex := bytes.IndexByte(data, 0)
+	if nullByteIndex == -1 {
+		return "", -1, nil, fmt.Errorf("object file poorly formatted: missing null byte separator")
+	}
+
+	header := string(data[:nullByteIndex])
+	headerParts := strings.Split(header, " ")
+	headerObjType := headerParts[0]
+	if len(headerParts) != 2 {
+		return "", -1, nil, fmt.Errorf("invalid object header: %s", header)
+	}
+
+	sizeBytes, err := strconv.Atoi(headerParts[1])
+	if err != nil {
+		return "", -1, nil, fmt.Errorf("invalid size in object header: %s", err)
+	}
+
+	content := data[nullByteIndex+1:]
+
+	return headerObjType, sizeBytes, content, nil
 }
 
-func createObjectFile(objType string, contentBytes []byte, repoDir string) (string, error) {
+func createObjectFile(objType ObjectType, contentBytes []byte, repoDir string) (string, error) {
 	sizeBytes := len(contentBytes)
-	header := fmt.Sprintf("%s %d\x00", objType, sizeBytes)
+	header := fmt.Sprintf("%s %d\x00", objType.toString(), sizeBytes)
 	headerBytes := []byte(header)
 
 	fileBytes := make([]byte, len(headerBytes)+len(contentBytes))
 	copy(fileBytes, headerBytes)
 	copy(fileBytes[len(headerBytes):], contentBytes)
-
-	fmt.Printf("DEBUG: Header size: %d bytes, Content size: %d bytes, Total size: %d bytes\n",
-		len(headerBytes), len(contentBytes), len(fileBytes))
 
 	objHashBytes := sha1.Sum(fileBytes)
 	objHash := hex.EncodeToString(objHashBytes[:])
@@ -289,47 +304,17 @@ func createObjectFile(objType string, contentBytes []byte, repoDir string) (stri
 	return objHash, nil
 }
 
-func parseCommitUser(s string) (*CommitUser, error) {
-	parts := strings.Split(s, " ")
-	dateSeconds, err := strconv.Atoi(parts[4])
-	if err != nil {
-		return nil, err
-	}
-	return &CommitUser{
-		name:        parts[1] + " " + parts[2],
-		email:       parts[3][1 : len(parts[3])-1],
-		dateSeconds: int64(dateSeconds),
-		timezone:    parts[5],
-	}, nil
-}
-
 /** BLOBS */
 
 func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
-	data, err := readObjectFile(objHash, repoDir)
+	headerObjType, sizeBytes, content, err := readObjectFile(objHash, repoDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read blob object file: %s", err)
 	}
 
-	parts := strings.Split(string(data), "\x00")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("object file poorly formatted - header and contents should be separated by null byte")
+	if headerObjType != Blob.toString() {
+		return nil, fmt.Errorf("expected blob object, received %s", headerObjType)
 	}
-
-	headerParts := strings.Split(parts[0], " ")
-	if len(headerParts) != 2 {
-		return nil, fmt.Errorf("object file poorly formatted - header parts should be space-separated")
-	}
-
-	if headerParts[0] != "blob" {
-		return nil, fmt.Errorf("object file poorly formatted - header does not start with 'blob'")
-	}
-	sizeBytes, err := strconv.Atoi(headerParts[1])
-	if err != nil {
-		return nil, fmt.Errorf("object file poorly formatted - contents size is not an integer")
-	}
-
-	content := parts[1]
 
 	return &BlobObject{
 		hash:      objHash,
@@ -339,14 +324,13 @@ func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
 }
 
 func createBlobObjectFromFile(filePath string, repoDir string) (*BlobObject, error) {
-	contentBytes, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file")
 	}
-	content := string(contentBytes)
-	sizeBytes := len(contentBytes)
+	sizeBytes := len(content)
 
-	blobObjHash, err := createObjectFile("blob", contentBytes, repoDir)
+	blobObjHash, err := createObjectFile(Blob, content, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -396,28 +380,15 @@ func parseTreeObjectEntry(entryHeader string, entryHash string) (*TreeObjectEntr
 }
 
 func readTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
-	data, err := readObjectFile(objHash, repoDir)
+	headerObjType, sizeBytes, content, err := readObjectFile(objHash, repoDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read tree object file: %s", err)
 	}
 
-	nullByteIndex := bytes.IndexByte(data, 0)
-	if nullByteIndex == -1 {
-		return nil, fmt.Errorf("object file poorly formatted: missing null byte separator")
+	if headerObjType != Tree.toString() {
+		return nil, fmt.Errorf("expected tree object, received %s", headerObjType)
 	}
 
-	header := string(data[:nullByteIndex])
-	headerParts := strings.Split(header, " ")
-	if len(headerParts) != 2 || headerParts[0] != "tree" {
-		return nil, fmt.Errorf("invalid tree object header: %s", header)
-	}
-
-	sizeBytes, err := strconv.Atoi(headerParts[1])
-	if err != nil {
-		return nil, fmt.Errorf("invalid size in tree object header: %s", err)
-	}
-
-	content := data[nullByteIndex+1:]
 	entries := []TreeObjectEntry{}
 	i := 0
 	for i < len(content) {
@@ -504,19 +475,24 @@ func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, err
 			})
 		}
 	}
-
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].name < entries[j].name
 	})
 
 	var contentBuilder strings.Builder
 	for _, entry := range entries {
-		fmt.Fprintf(&contentBuilder, "%d %s\x00%s", entry.mode, entry.name, entry.hash)
+		fmt.Fprintf(&contentBuilder, "%d %s\x00", entry.mode, entry.name)
+
+		hashBytes, err := hex.DecodeString(entry.hash)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hash format: %s", err)
+		}
+		contentBuilder.Write(hashBytes)
 	}
 	contentBytes := []byte(contentBuilder.String())
 	sizeBytes := len(contentBytes)
 
-	treeObjHash, err := createObjectFile("tree", contentBytes, repoDir)
+	treeObjHash, err := createObjectFile(Tree, contentBytes, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -529,6 +505,45 @@ func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, err
 }
 
 /** COMMITS */
+
+func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error) {
+	headerObjType, sizeBytes, content, err := readObjectFile(objHash, repoDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read commit object file: %s", err)
+	}
+
+	if headerObjType != Commit.toString() {
+		return nil, fmt.Errorf("expected commit object, received %s", headerObjType)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	treeHash := strings.Split(lines[0], " ")[1]
+	var parentCommitHashes []string
+	i := 1
+	for strings.HasPrefix(lines[i], "parent") {
+		parentCommitHashes = append(parentCommitHashes, strings.Split(lines[i], " ")[1])
+		i += 1
+	}
+	author, err := parseCommitUser(lines[i])
+	if err != nil {
+		return nil, err
+	}
+	committer, err := parseCommitUser(lines[i+1])
+	if err != nil {
+		return nil, err
+	}
+	commitMessage := strings.Join(lines[i+3:], "\n")
+
+	return &CommitObject{
+		hash:               objHash,
+		sizeBytes:          sizeBytes,
+		treeHash:           treeHash,
+		parentCommitHashes: parentCommitHashes,
+		author:             *author,
+		committer:          *committer,
+		commitMessage:      commitMessage,
+	}, nil
+}
 
 // TODO: my commit object file format may not match Git's exactly - I added newline characters here to make parsing easier
 func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string, repoDir string) (*CommitObject, error) {
@@ -555,11 +570,11 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 	fmt.Fprintf(&contentBuilder, "author %s <%s> %d %s\n", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
 	fmt.Fprintf(&contentBuilder, "committer %s <%s> %d %s\n", author_committer.name, author_committer.email, author_committer.dateSeconds, author_committer.timezone)
 
-	fmt.Fprintf(&contentBuilder, "\n\n%s", commitMessage)
+	fmt.Fprintf(&contentBuilder, "\n%s", commitMessage)
 
 	contentBytes := []byte(contentBuilder.String())
 	sizeBytes := len(contentBytes)
-	commitObjHash, err := createObjectFile("commit", contentBytes, repoDir)
+	commitObjHash, err := createObjectFile(Commit, contentBytes, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -575,55 +590,16 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 	}, nil
 }
 
-func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error) {
-	data, err := readObjectFile(objHash, repoDir)
+func parseCommitUser(s string) (*CommitUser, error) {
+	parts := strings.Split(s, " ")
+	dateSeconds, err := strconv.Atoi(parts[4])
 	if err != nil {
 		return nil, err
 	}
-
-	parts := strings.Split(string(data), "\x00")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("object file poorly formatted - header and contents should be separated by null byte")
-	}
-
-	headerParts := strings.Split(parts[0], " ")
-	if len(headerParts) != 2 {
-		return nil, fmt.Errorf("object file poorly formatted - header parts should be space-separated")
-	}
-
-	if headerParts[0] != "commit" {
-		return nil, fmt.Errorf("object file poorly formatted - header does not start with 'commit'")
-	}
-	sizeBytes, err := strconv.Atoi(headerParts[1])
-	if err != nil {
-		return nil, fmt.Errorf("object file poorly formatted - size is not an integer")
-	}
-
-	lines := strings.Split(parts[1], "\n")
-	treeHash := strings.Split(lines[0], " ")[1]
-	var parentCommitHashes []string
-	i := 1
-	for strings.HasPrefix(lines[i], "parent") {
-		parentCommitHashes = append(parentCommitHashes, strings.Split(lines[i], " ")[1])
-		i += 1
-	}
-	author, err := parseCommitUser(lines[i])
-	if err != nil {
-		return nil, err
-	}
-	committer, err := parseCommitUser(lines[i+1])
-	if err != nil {
-		return nil, err
-	}
-	commitMessage := lines[len(lines)-1]
-
-	return &CommitObject{
-		hash:               objHash,
-		sizeBytes:          sizeBytes,
-		treeHash:           treeHash,
-		parentCommitHashes: parentCommitHashes,
-		author:             *author,
-		committer:          *committer,
-		commitMessage:      commitMessage,
+	return &CommitUser{
+		name:        parts[1] + " " + parts[2],
+		email:       parts[3][1 : len(parts[3])-1],
+		dateSeconds: int64(dateSeconds),
+		timezone:    parts[5],
 	}, nil
 }
