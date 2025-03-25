@@ -89,7 +89,8 @@ func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, string, e
 		return nil, "", fmt.Errorf("refs in remote repository contained invalid SHA hash for HEAD: %s", headHash)
 	}
 
-	capabilities := "multi_ack ofs-delta thin-pack include-tag" // TODO: could maybe add a progress bar for cloning
+	// TODO: could add "ofs-delta" back here if you want to support ofs_delta objects in the packfile
+	capabilities := "multi_ack thin-pack include-tag" // TODO: could maybe add a progress bar for cloning
 	uploadPackPktLine := createPktLine(fmt.Sprintf("want %s %s", headHash, capabilities))
 	donePktLine := createPktLine("done")
 	uploadPackRequestBody := createPktLineStream([]string{uploadPackPktLine}) + donePktLine

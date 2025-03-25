@@ -79,6 +79,7 @@ func clearWorkingDirectory(repoDir string) error {
 	}
 
 	// Remove all entries except .git directory
+	// TODO: should i be removing other hidden files/directories? idt so
 	for _, entry := range entries {
 		if entry.Name() == ".git" {
 			continue

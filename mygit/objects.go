@@ -182,12 +182,7 @@ func isValidMode(mode int) bool {
 }
 
 func getObjectType(objHash string, repoDir string) (ObjectType, error) {
-	headerObjType, _, _, err := readObjectFile(objHash, repoDir)
-	if err != nil {
-		return -1, err
-	}
-
-	objType, err := objTypeFromString(headerObjType)
+	objType, _, _, err := readObjectFile(objHash, repoDir)
 	if err != nil {
 		return -1, err
 	}
@@ -236,34 +231,38 @@ func getObject(objHash string, repoDir string) (GitObject, error) {
 	return gitObj, nil
 }
 
-func readObjectFile(objHash string, repoDir string) (string, int, []byte, error) {
+func readObjectFile(objHash string, repoDir string) (ObjectType, int, []byte, error) {
 	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
 	file, err := os.Open(objPath)
 	if err != nil {
-		return "", -1, nil, fmt.Errorf("failed to open object file")
+		return -1, -1, nil, fmt.Errorf("failed to open object file")
 	}
 	defer file.Close()
 
 	data, err := zlibDecompress(file)
 	if err != nil {
-		return "", -1, nil, err
+		return -1, -1, nil, err
 	}
 
 	nullByteIndex := bytes.IndexByte(data, 0)
 	if nullByteIndex == -1 {
-		return "", -1, nil, fmt.Errorf("object file poorly formatted: missing null byte separator")
+		return -1, -1, nil, fmt.Errorf("object file poorly formatted: missing null byte separator")
 	}
 
 	header := string(data[:nullByteIndex])
 	headerParts := strings.Split(header, " ")
-	headerObjType := headerParts[0]
+	headerObjTypeStr := headerParts[0]
 	if len(headerParts) != 2 {
-		return "", -1, nil, fmt.Errorf("invalid object header: %s", header)
+		return -1, -1, nil, fmt.Errorf("invalid object header: %s", header)
+	}
+	headerObjType, err := objTypeFromString(headerObjTypeStr)
+	if err != nil {
+		return -1, -1, nil, fmt.Errorf("invalid object type in header: %s", header)
 	}
 
 	sizeBytes, err := strconv.Atoi(headerParts[1])
 	if err != nil {
-		return "", -1, nil, fmt.Errorf("invalid size in object header: %s", err)
+		return -1, -1, nil, fmt.Errorf("invalid size in object header: %s", err)
 	}
 
 	content := data[nullByteIndex+1:]
@@ -312,8 +311,8 @@ func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
 		return nil, fmt.Errorf("failed to read blob object file: %s", err)
 	}
 
-	if headerObjType != Blob.toString() {
-		return nil, fmt.Errorf("expected blob object, received %s", headerObjType)
+	if headerObjType != Blob {
+		return nil, fmt.Errorf("expected blob object, received %s", headerObjType.toString())
 	}
 
 	return &BlobObject{
@@ -385,8 +384,8 @@ func readTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
 		return nil, fmt.Errorf("failed to read tree object file: %s", err)
 	}
 
-	if headerObjType != Tree.toString() {
-		return nil, fmt.Errorf("expected tree object, received %s", headerObjType)
+	if headerObjType != Tree {
+		return nil, fmt.Errorf("expected tree object, received %s", headerObjType.toString())
 	}
 
 	entries := []TreeObjectEntry{}
@@ -512,8 +511,8 @@ func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error)
 		return nil, fmt.Errorf("failed to read commit object file: %s", err)
 	}
 
-	if headerObjType != Commit.toString() {
-		return nil, fmt.Errorf("expected commit object, received %s", headerObjType)
+	if headerObjType != Commit {
+		return nil, fmt.Errorf("expected commit object, received %s", headerObjType.toString())
 	}
 
 	lines := strings.Split(string(content), "\n")
