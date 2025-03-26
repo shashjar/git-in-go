@@ -7,7 +7,10 @@ import (
 	"fmt"
 )
 
-const PACKFILE_CHECKSUM_LENGTH = 20
+const (
+	PACKFILE_CHECKSUM_LENGTH = 20
+	PACKFILE_HEADER_LENGTH   = 12
+)
 
 type PackfileObjectType int
 
@@ -38,13 +41,13 @@ func (pot *PackfileObjectType) toString() string {
 	}
 }
 
-// Represents a packfile deltified object, which represents a delta of a base object included elsewhere in the packfile
-type PackfileDeltaObject struct {
-	bashObjHash string
+// Represents a packfile deltified object (ref delta), which is a delta of a base object (referenced by hash)
+// using COPY and ADD instructions for sequences of data
+type PackfileRefDeltaObject struct {
+	baseObjHash string
 	deltaData   []byte
 }
 
-// TODO: should I be using the index file to help parse the packfile?
 func readPackfile(packfile []byte, repoDir string) error {
 	err := verifyPackfileChecksum(packfile)
 	if err != nil {
@@ -52,12 +55,15 @@ func readPackfile(packfile []byte, repoDir string) error {
 	}
 	packfile = packfile[:len(packfile)-PACKFILE_CHECKSUM_LENGTH]
 
-	numObjects, remainingPackfile, err := readPackfileHeader(packfile)
+	i := 0
+
+	numObjects, err := readPackfileHeader(packfile)
 	if err != nil {
 		return err
 	}
+	i += PACKFILE_HEADER_LENGTH
 
-	err = readPackfileObjects(remainingPackfile, numObjects, repoDir)
+	err = readPackfileObjects(packfile, i, numObjects, repoDir)
 	if err != nil {
 		return err
 	}
@@ -80,94 +86,93 @@ func verifyPackfileChecksum(packfile []byte) error {
 	return nil
 }
 
-func readPackfileHeader(packfile []byte) (int, []byte, error) {
-	if len(packfile) < 4 {
-		return -1, nil, fmt.Errorf("invalid packfile: too short to contain a header")
+func readPackfileHeader(packfile []byte) (int, error) {
+	if len(packfile) < PACKFILE_HEADER_LENGTH {
+		return -1, fmt.Errorf("invalid packfile: too short to contain a header")
 	}
 
 	signature := string(packfile[0:4])
 	if signature != "PACK" {
-		return -1, nil, fmt.Errorf("invalid packfile signature: expected 'PACK', got '%s'", signature)
+		return -1, fmt.Errorf("invalid packfile signature: expected 'PACK', got '%s'", signature)
 	}
 
 	versionNumber := binary.BigEndian.Uint32(packfile[4:8])
 	if versionNumber != 2 {
-		return -1, nil, fmt.Errorf("unsupported packfile version number: expected 2, got %d", versionNumber)
+		return -1, fmt.Errorf("unsupported packfile version number: expected 2, got %d", versionNumber)
 	}
 
 	numObjects := binary.BigEndian.Uint32(packfile[8:12])
-	return int(numObjects), packfile[12:], nil
+	return int(numObjects), nil
 }
 
-func readPackfileObjectHeader(data []byte) (PackfileObjectType, int, []byte, error) {
-	b := data[0]
+func readPackfileObjectHeader(packfile []byte, i int) (PackfileObjectType, int, int, error) {
+	b := packfile[i]
 	shift := 4
 	packfileObjectType := PackfileObjectType((b >> shift) & 0x07)
 
 	// Only the rightmost 4 bits of the first byte are used for the variable length encoding, so passing shift as 4
-	packfileObjectLength, remainingData, err := readVariableLengthEncoding(data, shift)
+	packfileObjectLength, i, err := readVariableLengthEncoding(packfile, i, shift)
 	if err != nil {
-		return -1, -1, nil, err
+		return -1, -1, -1, err
 	}
 
-	return packfileObjectType, packfileObjectLength, remainingData, nil
+	return packfileObjectType, packfileObjectLength, i, nil
 }
 
-func readVariableLengthEncoding(data []byte, shift int) (int, []byte, error) {
-	b := data[0]
+func readVariableLengthEncoding(data []byte, i int, shift int) (int, int, error) {
+	b := data[i]
 	mask := byte((1 << shift) - 1)
 	packfileObjectLength := int(b & mask)
 	bytesRead := 1
 
 	for (b & 0x80) != 0 {
 		if bytesRead >= len(data) {
-			return -1, nil, fmt.Errorf("incomplete packfile object length")
+			return -1, -1, fmt.Errorf("incomplete packfile object length")
 		}
 
-		b = data[bytesRead]
+		b = data[i+bytesRead]
 		packfileObjectLength |= int(b&0x7F) << shift
 		shift += 7
 		bytesRead += 1
 	}
 
-	return packfileObjectLength, data[bytesRead:], nil
+	return packfileObjectLength, i + bytesRead, nil
 }
 
-func decompressPackfileObject(data []byte, packfileObjectLength int) ([]byte, []byte, error) {
-	decompressedObjData, compressedBytesRead, err := zlibDecompressWithReadCount(data)
+func decompressPackfileObject(data []byte, i int, packfileObjectLength int) ([]byte, int, error) {
+	decompressedObjData, compressedBytesRead, err := zlibDecompressWithReadCount(data[i:])
 	if err != nil {
-		return nil, nil, err
+		return nil, -1, err
 	}
 
 	if len(decompressedObjData) != packfileObjectLength {
-		return nil, nil, fmt.Errorf("decompressed object data length mismatch: expected %d, got %d", packfileObjectLength, len(decompressedObjData))
+		return nil, -1, fmt.Errorf("decompressed object data length mismatch: expected %d, got %d", packfileObjectLength, len(decompressedObjData))
 	}
 
-	remainingData := data[compressedBytesRead:]
-	return decompressedObjData, remainingData, nil
+	return decompressedObjData, i + compressedBytesRead, nil
 }
 
-func readPackfileObjects(data []byte, numObjects int, repoDir string) error {
-	deltaObjs := []*PackfileDeltaObject{}
+func readPackfileObjects(packfile []byte, i int, numObjects int, repoDir string) error {
+	refDeltaObjs := []*PackfileRefDeltaObject{}
 
-	remainingData := data
 	for range numObjects {
-		deltaObj, remaining, err := readPackfileObject(remainingData, repoDir)
+		var refDeltaObj *PackfileRefDeltaObject
+		var err error
+		refDeltaObj, i, err = readPackfileObject(packfile, i, repoDir)
 		if err != nil {
 			return err
 		}
-		remainingData = remaining
 
-		if deltaObj != nil {
-			deltaObjs = append(deltaObjs, deltaObj)
+		if refDeltaObj != nil {
+			refDeltaObjs = append(refDeltaObjs, refDeltaObj)
 		}
 	}
 
-	if len(remainingData) != 0 {
+	if i != len(packfile) {
 		return fmt.Errorf("leftover data in packfile after reading all expected objects")
 	}
 
-	err := applyDeltas(deltaObjs, repoDir)
+	err := applyRefDeltas(refDeltaObjs, repoDir)
 	if err != nil {
 		return err
 	}
@@ -175,10 +180,10 @@ func readPackfileObjects(data []byte, numObjects int, repoDir string) error {
 	return nil
 }
 
-func readPackfileObject(data []byte, repoDir string) (*PackfileDeltaObject, []byte, error) {
-	packfileObjectType, packfileObjectLength, remainingData, err := readPackfileObjectHeader(data)
+func readPackfileObject(packfile []byte, i int, repoDir string) (*PackfileRefDeltaObject, int, error) {
+	packfileObjectType, packfileObjectLength, i, err := readPackfileObjectHeader(packfile, i)
 	if err != nil {
-		return nil, nil, err
+		return nil, -1, err
 	}
 
 	var objTypeStr string
@@ -186,94 +191,105 @@ func readPackfileObject(data []byte, repoDir string) (*PackfileDeltaObject, []by
 	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB, PACKFILE_OBJ_TAG: // TODO: make sure tag objects are correctly created/handled here
 		objTypeStr = packfileObjType.toString()
 	case PACKFILE_OBJ_OFS_DELTA:
-		remainingData, err = readOfsDeltaPackfileObject(remainingData, packfileObjectLength)
-		return nil, remainingData, err
+		i, err = readOfsDeltaPackfileObject(packfile, i, packfileObjectLength, repoDir)
+		return nil, i, err
 	case PACKFILE_OBJ_REF_DELTA:
-		deltaObj, remainingData, err := readRefDeltaPackfileObject(remainingData, packfileObjectLength)
-		return deltaObj, remainingData, err
+		refDeltaObj, i, err := readRefDeltaPackfileObject(packfile, i, packfileObjectLength)
+		return refDeltaObj, i, err
 	default:
-		return nil, nil, fmt.Errorf("unsupported packfile object type: %d", packfileObjectType)
+		return nil, -1, fmt.Errorf("unsupported packfile object type: %d", packfileObjectType)
 	}
 
-	decompressedObjData, remainingData, err := decompressPackfileObject(remainingData, packfileObjectLength)
+	decompressedObjData, i, err := decompressPackfileObject(packfile, i, packfileObjectLength)
 	if err != nil {
-		return nil, nil, err
+		return nil, -1, err
 	}
 
 	objType, err := objTypeFromString(objTypeStr)
 	if err != nil {
-		return nil, nil, err
+		return nil, -1, err
 	}
 
 	_, err = createObjectFile(objType, decompressedObjData, repoDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create object file: %s", err)
+		return nil, -1, fmt.Errorf("failed to create object file: %s", err)
 	}
 
-	return nil, remainingData, nil
+	return nil, i, nil
 }
 
-// TODO: just skipping over the ofs_delta object for now
-func readOfsDeltaPackfileObject(data []byte, packfileObjectLength int) ([]byte, error) {
-	// TODO: ignoring the `offset` parsed by readVariableLengthEncoding for now
+func readOfsDeltaPackfileObject(packfile []byte, i int, packfileObjectLength int, repoDir string) (int, error) {
 	// The rightmost 7 bits of the first byte are used for the variable length encoding, so passing shift as 7
-	_, remainingData, err := readVariableLengthEncoding(data, 7)
+	baseObjOffset, i, err := readVariableLengthEncoding(packfile, i, 7)
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
 
-	// TODO: ignoring the `decompressedOfsDeltaObjData` returned here for now
-	_, remainingData, err = decompressPackfileObject(remainingData, packfileObjectLength)
+	deltaData, i, err := decompressPackfileObject(packfile, i, packfileObjectLength)
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
 
-	return remainingData, nil
+	baseObjPos := i - baseObjOffset
+	if baseObjPos < 0 || baseObjPos >= len(packfile) {
+		fmt.Println("i is:", i)
+		return -1, fmt.Errorf("invalid base object position indicated by ofs delta object: %d", baseObjPos)
+	}
+
+	packfileObjectType, packfileObjectLength, j, err := readPackfileObjectHeader(packfile, baseObjPos)
+	if err != nil {
+		return -1, err
+	}
+	objType, err := objTypeFromString(packfileObjectType.toString())
+	if err != nil {
+		return -1, err
+	}
+
+	baseObjContent, _, err := decompressPackfileObject(packfile, j, packfileObjectLength)
+	if err != nil {
+		return -1, err
+	}
+
+	targetObjContent, err := applyDelta(deltaData, baseObjContent)
+	if err != nil {
+		return -1, err
+	}
+
+	_, err = createObjectFile(objType, targetObjContent, repoDir)
+	if err != nil {
+		return -1, err
+	}
+
+	return i, nil
 }
 
-func readRefDeltaPackfileObject(data []byte, packfileObjectLength int) (*PackfileDeltaObject, []byte, error) {
-	if len(data) < 20 {
-		return nil, nil, fmt.Errorf("invalid ref_delta packfile object: too short to contain base object SHA")
+func readRefDeltaPackfileObject(packfile []byte, i int, packfileObjectLength int) (*PackfileRefDeltaObject, int, error) {
+	if len(packfile[i:]) < OBJECT_HASH_LENGTH_BYTES {
+		return nil, -1, fmt.Errorf("invalid ref_delta packfile object: too short to contain base object SHA")
 	}
 
-	baseObjSHA := fmt.Sprintf("%x", data[:20])
-	remainingData := data[20:]
+	baseObjSHA := fmt.Sprintf("%x", packfile[i:i+OBJECT_HASH_LENGTH_BYTES])
+	i += OBJECT_HASH_LENGTH_BYTES
 
-	deltaData, remainingData, err := decompressPackfileObject(remainingData, packfileObjectLength)
+	deltaData, i, err := decompressPackfileObject(packfile, i, packfileObjectLength)
 	if err != nil {
-		return nil, nil, err
+		return nil, -1, err
 	}
 
-	return &PackfileDeltaObject{
-		bashObjHash: baseObjSHA,
+	return &PackfileRefDeltaObject{
+		baseObjHash: baseObjSHA,
 		deltaData:   deltaData,
-	}, remainingData, nil
+	}, i, nil
 }
 
-func applyDeltas(deltaObjs []*PackfileDeltaObject, repoDir string) error {
-	for _, deltaObj := range deltaObjs {
-		remainingData := deltaObj.deltaData
-
-		sourceSize, remainingData, err := readVariableLengthEncoding(remainingData, 7)
+func applyRefDeltas(refDeltaObjs []*PackfileRefDeltaObject, repoDir string) error {
+	for _, refDeltaObj := range refDeltaObjs {
+		objType, _, baseObjContent, err := readObjectFile(refDeltaObj.baseObjHash, repoDir)
 		if err != nil {
-			return fmt.Errorf("failed to read source size in delta object: %s", err)
+			return fmt.Errorf("failed to read base object referenced by delta object: %s", err)
 		}
 
-		targetSize, remainingData, err := readVariableLengthEncoding(remainingData, 7)
-		if err != nil {
-			return fmt.Errorf("failed to read target size in delta object: %s", err)
-		}
-
-		objType, baseObjSizeBytes, baseObjContent, err := readObjectFile(deltaObj.bashObjHash, repoDir)
-		if err != nil {
-			return fmt.Errorf("failed to base object referenced by delta object: %s", err)
-		}
-
-		if sourceSize != baseObjSizeBytes {
-			return fmt.Errorf("source size in delta object does not match size specified in base object")
-		}
-
-		targetObjContent, err := applyDelta(remainingData, targetSize, baseObjContent)
+		targetObjContent, err := applyDelta(refDeltaObj.deltaData, baseObjContent)
 		if err != nil {
 			return err
 		}
@@ -287,9 +303,26 @@ func applyDeltas(deltaObjs []*PackfileDeltaObject, repoDir string) error {
 	return nil
 }
 
-func applyDelta(deltaInstructions []byte, targetSize int, baseObjContent []byte) ([]byte, error) {
-	targetObjContent := make([]byte, 0, targetSize)
+func applyDelta(deltaData []byte, baseObjContent []byte) ([]byte, error) {
 	i := 0
+
+	sourceSize, i, err := readVariableLengthEncoding(deltaData, i, 7)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read source size in delta data: %s", err)
+	}
+
+	targetSize, i, err := readVariableLengthEncoding(deltaData, i, 7)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read target size in delta data: %s", err)
+	}
+
+	if sourceSize != len(baseObjContent) {
+		return nil, fmt.Errorf("source size in delta data does not match size specified in base object")
+	}
+
+	deltaInstructions := deltaData[i:]
+	i = 0
+	targetObjContent := make([]byte, 0, targetSize)
 	for i < len(deltaInstructions) {
 		cmd := deltaInstructions[i]
 		i += 1

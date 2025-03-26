@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func checkoutCommit(commitHash string, repoDir string) error {
@@ -78,10 +79,9 @@ func clearWorkingDirectory(repoDir string) error {
 		return fmt.Errorf("failed to read repository directory: %w", err)
 	}
 
-	// Remove all entries except .git directory
-	// TODO: should i be removing other hidden files/directories? idt so
+	// Remove all entries except hidden directories & files (such as .git/)
 	for _, entry := range entries {
-		if entry.Name() == ".git" {
+		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 
