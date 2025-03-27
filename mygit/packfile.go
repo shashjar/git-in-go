@@ -111,7 +111,7 @@ func readPackfileObjectHeader(packfile []byte, i int) (PackfileObjectType, int, 
 	packfileObjectType := PackfileObjectType((b >> shift) & 0x07)
 
 	// Only the rightmost 4 bits of the first byte are used for the variable length encoding, so passing shift as 4
-	packfileObjectLength, i, err := readVariableLengthEncoding(packfile, i, shift)
+	packfileObjectLength, i, err := readVariableSizeEncoding(packfile, i, shift)
 	if err != nil {
 		return -1, -1, -1, err
 	}
@@ -119,24 +119,45 @@ func readPackfileObjectHeader(packfile []byte, i int) (PackfileObjectType, int, 
 	return packfileObjectType, packfileObjectLength, i, nil
 }
 
-func readVariableLengthEncoding(data []byte, i int, shift int) (int, int, error) {
+// Used for encoding sizes in the packfile (later values more significant)
+func readVariableSizeEncoding(data []byte, i int, shift int) (int, int, error) {
 	b := data[i]
 	mask := byte((1 << shift) - 1)
-	packfileObjectLength := int(b & mask)
+	decodedSize := int(b & mask)
 	bytesRead := 1
 
 	for (b & 0x80) != 0 {
-		if bytesRead >= len(data) {
-			return -1, -1, fmt.Errorf("incomplete packfile object length")
+		if i+bytesRead >= len(data) {
+			return -1, -1, fmt.Errorf("data not long enough to read variable size encoding")
 		}
 
 		b = data[i+bytesRead]
-		packfileObjectLength |= int(b&0x7F) << shift
+		decodedSize |= int(b&0x7F) << shift // Shift the new 7 bits received, as they are the most significant
 		shift += 7
 		bytesRead += 1
 	}
 
-	return packfileObjectLength, i + bytesRead, nil
+	return decodedSize, i + bytesRead, nil
+}
+
+// Used for encoding offsets (for ofs delta objects) in the packfile (later values less significant)
+func readVariableOffsetEncoding(data []byte, i int) (int, int, error) {
+	b := data[i]
+	decodedOffset := int(b & 0x7F)
+	bytesRead := 1
+
+	for (b & 0x80) != 0 {
+		if i+bytesRead >= len(data) {
+			return -1, -1, fmt.Errorf("data not long enough to read variable offset encoding")
+		}
+
+		b = data[i+bytesRead]
+		decodedOffset = (decodedOffset + 1) << 7 // Apply bias for multi-byte offsets
+		decodedOffset |= int(b & 0x7F)           // Append next 7 bits
+		bytesRead += 1
+	}
+
+	return decodedOffset, i + bytesRead, nil
 }
 
 func decompressPackfileObject(data []byte, i int, packfileObjectLength int) ([]byte, int, error) {
@@ -306,12 +327,12 @@ func applyRefDeltas(refDeltaObjs []*PackfileRefDeltaObject, repoDir string) erro
 func applyDelta(deltaData []byte, baseObjContent []byte) ([]byte, error) {
 	i := 0
 
-	sourceSize, i, err := readVariableLengthEncoding(deltaData, i, 7)
+	sourceSize, i, err := readVariableSizeEncoding(deltaData, i, 7)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read source size in delta data: %s", err)
 	}
 
-	targetSize, i, err := readVariableLengthEncoding(deltaData, i, 7)
+	targetSize, i, err := readVariableSizeEncoding(deltaData, i, 7)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read target size in delta data: %s", err)
 	}
