@@ -202,6 +202,8 @@ func readPackfileObjects(packfile []byte, i int, numObjects int, repoDir string)
 }
 
 func readPackfileObject(packfile []byte, i int, repoDir string) (*PackfileRefDeltaObject, int, error) {
+	packfileObjectStartPos := i
+
 	packfileObjectType, packfileObjectLength, i, err := readPackfileObjectHeader(packfile, i)
 	if err != nil {
 		return nil, -1, err
@@ -212,7 +214,7 @@ func readPackfileObject(packfile []byte, i int, repoDir string) (*PackfileRefDel
 	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB, PACKFILE_OBJ_TAG: // TODO: make sure tag objects are correctly created/handled here
 		objTypeStr = packfileObjType.toString()
 	case PACKFILE_OBJ_OFS_DELTA:
-		i, err = readOfsDeltaPackfileObject(packfile, i, packfileObjectLength, repoDir)
+		_, i, err = applyOfsDeltaPackfileObject(packfile, i, packfileObjectStartPos, packfileObjectLength, repoDir)
 		return nil, i, err
 	case PACKFILE_OBJ_REF_DELTA:
 		refDeltaObj, i, err := readRefDeltaPackfileObject(packfile, i, packfileObjectLength)
@@ -239,49 +241,66 @@ func readPackfileObject(packfile []byte, i int, repoDir string) (*PackfileRefDel
 	return nil, i, nil
 }
 
-func readOfsDeltaPackfileObject(packfile []byte, i int, packfileObjectLength int, repoDir string) (int, error) {
-	// The rightmost 7 bits of the first byte are used for the variable length encoding, so passing shift as 7
-	baseObjOffset, i, err := readVariableLengthEncoding(packfile, i, 7)
+func applyOfsDeltaPackfileObject(packfile []byte, i int, deltaObjStartPos int, packfileObjectLength int, repoDir string) (string, int, error) {
+	// This offset is a negative relative offset from the ofs delta object's position in the packfile, indicating where the base object starts
+	baseObjOffset, i, err := readVariableOffsetEncoding(packfile, i)
 	if err != nil {
-		return -1, err
+		return "", -1, err
 	}
 
 	deltaData, i, err := decompressPackfileObject(packfile, i, packfileObjectLength)
 	if err != nil {
-		return -1, err
+		return "", -1, err
 	}
 
-	baseObjPos := i - baseObjOffset
+	baseObjPos := deltaObjStartPos - baseObjOffset
 	if baseObjPos < 0 || baseObjPos >= len(packfile) {
-		fmt.Println("i is:", i)
-		return -1, fmt.Errorf("invalid base object position indicated by ofs delta object: %d", baseObjPos)
+		return "", -1, fmt.Errorf("invalid base object position indicated by ofs delta object: %d", baseObjPos)
 	}
 
 	packfileObjectType, packfileObjectLength, j, err := readPackfileObjectHeader(packfile, baseObjPos)
 	if err != nil {
-		return -1, err
-	}
-	objType, err := objTypeFromString(packfileObjectType.toString())
-	if err != nil {
-		return -1, err
+		return "", -1, err
 	}
 
-	baseObjContent, _, err := decompressPackfileObject(packfile, j, packfileObjectLength)
-	if err != nil {
-		return -1, err
+	// We could have a chain of delta objects, so we may need to recursively resolve them
+	var targetObjType ObjectType
+	var baseObjContent []byte
+	if packfileObjectType == PACKFILE_OBJ_OFS_DELTA {
+		baseObjHash, _, err := applyOfsDeltaPackfileObject(packfile, j, baseObjPos, packfileObjectLength, repoDir)
+		if err != nil {
+			return "", -1, err
+		}
+
+		targetObjType, _, baseObjContent, err = readObjectFile(baseObjHash, repoDir)
+		if err != nil {
+			return "", -1, fmt.Errorf("failed to read base object referenced by delta object: %s", err)
+		}
+	} else if packfileObjectType == PACKFILE_OBJ_REF_DELTA {
+		return "", -1, fmt.Errorf("ofs_delta object referencing a ref_delta object as its base object is not supported")
+	} else {
+		targetObjType, err = objTypeFromString(packfileObjectType.toString())
+		if err != nil {
+			return "", -1, err
+		}
+
+		baseObjContent, _, err = decompressPackfileObject(packfile, j, packfileObjectLength)
+		if err != nil {
+			return "", -1, err
+		}
 	}
 
 	targetObjContent, err := applyDelta(deltaData, baseObjContent)
 	if err != nil {
-		return -1, err
+		return "", -1, err
 	}
 
-	_, err = createObjectFile(objType, targetObjContent, repoDir)
+	targetObjHash, err := createObjectFile(targetObjType, targetObjContent, repoDir)
 	if err != nil {
-		return -1, err
+		return "", -1, err
 	}
 
-	return i, nil
+	return targetObjHash, i, nil
 }
 
 func readRefDeltaPackfileObject(packfile []byte, i int, packfileObjectLength int) (*PackfileRefDeltaObject, int, error) {
