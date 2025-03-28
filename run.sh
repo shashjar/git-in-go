@@ -13,7 +13,7 @@ CURRENT_DIR="$(pwd)"
 if [ "$(basename "$CURRENT_DIR")" = "git-in-go" ]; then
   PROJECT_ROOT="$CURRENT_DIR"
 else
-  PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+  PROJECT_ROOT="$(dirname "$CURRENT_DIR")"
 fi
 
 # Build the Go program in the mygit/ directory
