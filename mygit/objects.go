@@ -544,7 +544,6 @@ func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error)
 	}, nil
 }
 
-// TODO: my commit object file format may not match Git's exactly - I added newline characters here to make parsing easier
 func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string, repoDir string) (*CommitObject, error) {
 	var contentBuilder strings.Builder
 	fmt.Fprintf(&contentBuilder, "tree %s\n", treeHash)

@@ -12,10 +12,17 @@ import (
 )
 
 func cloneRepo(repoURL string, repoDir string) {
-	err := os.MkdirAll(repoDir, 0755)
+	info, err := os.Stat(repoDir)
+	if !os.IsNotExist(err) && info.IsDir() {
+		log.Fatalf("Destination path '%s' already exists", repoDir)
+	}
+
+	err = os.MkdirAll(repoDir, 0755)
 	if err != nil {
 		log.Fatalf("Failed to create repository directory: %s\n", err)
 	}
+
+	fmt.Printf("Cloning into '%s'...\n", repoDir)
 
 	_, err = initRepo(repoDir)
 	if err != nil {
@@ -89,7 +96,6 @@ func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, string, e
 		return nil, "", fmt.Errorf("refs in remote repository contained invalid SHA hash for HEAD: %s", headHash)
 	}
 
-	// TODO: could maybe add a progress bar for cloning
 	capabilities := "multi_ack ofs-delta thin-pack include-tag"
 	uploadPackPktLine := createPktLine(fmt.Sprintf("want %s %s", headHash, capabilities))
 	donePktLine := createPktLine("done")

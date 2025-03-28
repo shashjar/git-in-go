@@ -61,12 +61,14 @@ func readPackfile(packfile []byte, repoDir string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Printf("remote: Enumerating objects: %d, done.\n", numObjects)
 	i += PACKFILE_HEADER_LENGTH
 
 	err = readPackfileObjects(packfile, i, numObjects, repoDir)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Reading objects: 100%% (%d/%d), done.\n", numObjects, numObjects)
 
 	return nil
 }
@@ -119,7 +121,7 @@ func readPackfileObjectHeader(packfile []byte, i int) (PackfileObjectType, int, 
 	return packfileObjectType, packfileObjectLength, i, nil
 }
 
-// Used for encoding sizes in the packfile (later values more significant)
+// Used for reading encoded sizes in the packfile (later values more significant)
 func readVariableSizeEncoding(data []byte, i int, shift int) (int, int, error) {
 	b := data[i]
 	mask := byte((1 << shift) - 1)
@@ -140,7 +142,7 @@ func readVariableSizeEncoding(data []byte, i int, shift int) (int, int, error) {
 	return decodedSize, i + bytesRead, nil
 }
 
-// Used for encoding offsets (for ofs delta objects) in the packfile (later values less significant)
+// Used for reading encoded offsets (for ofs delta objects) in the packfile (later values less significant)
 func readVariableOffsetEncoding(data []byte, i int) (int, int, error) {
 	b := data[i]
 	decodedOffset := int(b & 0x7F)
@@ -211,7 +213,7 @@ func readPackfileObject(packfile []byte, i int, repoDir string) (*PackfileRefDel
 
 	var objTypeStr string
 	switch packfileObjType := PackfileObjectType(packfileObjectType); packfileObjType {
-	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB, PACKFILE_OBJ_TAG: // TODO: make sure tag objects are correctly created/handled here
+	case PACKFILE_OBJ_COMMIT, PACKFILE_OBJ_TREE, PACKFILE_OBJ_BLOB, PACKFILE_OBJ_TAG:
 		objTypeStr = packfileObjType.toString()
 	case PACKFILE_OBJ_OFS_DELTA:
 		_, i, err = applyOfsDeltaPackfileObject(packfile, i, packfileObjectStartPos, packfileObjectLength, repoDir)
