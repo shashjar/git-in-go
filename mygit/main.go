@@ -4,17 +4,32 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
-
-const REPO_DIR = "repo/"
 
 func configureLogger() {
 	log.SetFlags(0)
 }
 
+func getRepoDir() string {
+	repoDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to retrieve current working directory as repository: %s\n", err)
+		os.Exit(1)
+	}
+
+	if !strings.HasSuffix(repoDir, "/") {
+		repoDir = repoDir + "/"
+	}
+
+	return repoDir
+}
+
 // Usage: ./run.sh <command> [<args>...]
 func main() {
 	configureLogger()
+
+	repoDir := getRepoDir()
 
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: ./run.sh <command> [<args>...]\n")
@@ -23,17 +38,17 @@ func main() {
 
 	switch command := os.Args[1]; command {
 	case "init":
-		initHandler()
+		initHandler(repoDir)
 	case "cat-file":
-		catFileHandler()
+		catFileHandler(repoDir)
 	case "hash-object":
-		hashObjectHandler()
+		hashObjectHandler(repoDir)
 	case "ls-tree":
-		lsTreeHandler()
+		lsTreeHandler(repoDir)
 	case "write-tree":
-		writeTreeHandler()
+		writeTreeHandler(repoDir)
 	case "commit-tree":
-		commitTreeHandler()
+		commitTreeHandler(repoDir)
 	case "clone":
 		cloneHandler()
 	default:

@@ -1,8 +1,4 @@
-# Reading a zlib-compressed file
-
-```
-python3 -c "import sys, zlib; print(zlib.decompress(sys.stdin.buffer.read()).decode())" < <file_name>
-```
+After moving `run.sh` into the repository directory, the below commands can be used (the script directory will be used as the repository directory).
 
 # `git init`
 
@@ -48,6 +44,14 @@ echo "hello world" > test.txt
 
 # `git clone`
 
+Run from the project root.
+
 ```
 ./run.sh clone https://github.com/shashjar/redis-in-go cloned-redis-in-go
+```
+
+# Reading a zlib-compressed file
+
+```
+python3 -c "import sys, zlib; print(zlib.decompress(sys.stdin.buffer.read()).decode())" < <file_name>
 ```

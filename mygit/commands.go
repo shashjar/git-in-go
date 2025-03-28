@@ -8,15 +8,15 @@ import (
 	"strings"
 )
 
-func initHandler() {
-	absPath, err := initRepo(REPO_DIR)
+func initHandler(repoDir string) {
+	absPath, err := initRepo(repoDir)
 	if err != nil {
 		log.Fatalf("Error initializing Git repository: %s\n", err)
 	}
 	log.Printf("Initialized empty Git repository in %s\n", absPath)
 }
 
-func catFileHandler() {
+func catFileHandler(repoDir string) {
 	flag := os.Args[2]
 	if len(os.Args) != 4 || (flag != "-t" && flag != "-s" && flag != "-p") {
 		log.Fatal("Usage: cat-file (-t | -s | -p) <object_sha>")
@@ -27,7 +27,7 @@ func catFileHandler() {
 		log.Fatalf("Invalid object hash: %s\n", objHash)
 	}
 
-	obj, err := getObject(objHash, REPO_DIR)
+	obj, err := getObject(objHash, repoDir)
 	if err != nil {
 		log.Fatalf("Could not read object file: %s\n", err)
 	}
@@ -45,13 +45,13 @@ func catFileHandler() {
 	}
 }
 
-func hashObjectHandler() {
+func hashObjectHandler(repoDir string) {
 	if len(os.Args) != 4 || os.Args[2] != "-w" {
 		log.Fatal("Usage: hash-object -w <file>")
 	}
 
 	filePath := os.Args[3]
-	blobObj, err := createBlobObjectFromFile(REPO_DIR+filePath, REPO_DIR)
+	blobObj, err := createBlobObjectFromFile(repoDir+filePath, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create blob object from file: %s\n", err)
 	}
@@ -59,7 +59,7 @@ func hashObjectHandler() {
 	fmt.Println(blobObj.hash)
 }
 
-func lsTreeHandler() {
+func lsTreeHandler(repoDir string) {
 	var nameOnly bool
 	if len(os.Args) == 3 {
 		nameOnly = false
@@ -74,7 +74,7 @@ func lsTreeHandler() {
 		log.Fatalf("Invalid object hash: %s\n", treeHash)
 	}
 
-	treeObj, err := readTreeObjectFile(treeHash, REPO_DIR)
+	treeObj, err := readTreeObjectFile(treeHash, repoDir)
 	if err != nil {
 		log.Fatalf("Could not read tree object file: %s\n", err)
 	}
@@ -85,12 +85,12 @@ func lsTreeHandler() {
 	}
 }
 
-func writeTreeHandler() {
+func writeTreeHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: write-tree")
 	}
 
-	treeObj, err := createTreeObjectFromDirectory(REPO_DIR, REPO_DIR)
+	treeObj, err := createTreeObjectFromDirectory(repoDir, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create tree object for directory: %s\n", err)
 	}
@@ -98,7 +98,7 @@ func writeTreeHandler() {
 	fmt.Println(treeObj.hash)
 }
 
-func commitTreeHandler() {
+func commitTreeHandler(repoDir string) {
 	if len(os.Args) < 3 || len(os.Args) > 7 {
 		log.Fatal("Usage: commit-tree <tree_sha> [-p <parent_commit_sha>] [-m <commit_message>]")
 	}
@@ -122,7 +122,7 @@ func commitTreeHandler() {
 		parentCommitHashes = append(parentCommitHashes, *parentCommitHashPtr)
 	}
 
-	commitObj, err := createCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr, REPO_DIR)
+	commitObj, err := createCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create commit object from tree: %s\n", err)
 	}
@@ -130,7 +130,6 @@ func commitTreeHandler() {
 	fmt.Println(commitObj.hash)
 }
 
-// TODO: break functions along this code path up as needed + organize them into different files
 func cloneHandler() {
 	if len(os.Args) != 3 && len(os.Args) != 4 {
 		log.Fatal("Usage: clone <repo_url> [some_dir]")
