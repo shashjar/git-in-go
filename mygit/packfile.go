@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	PACKFILE_CHECKSUM_LENGTH = 20
 	PACKFILE_HEADER_LENGTH   = 12
+	PACKFILE_CHECKSUM_LENGTH = 20
 )
 
 type PackfileObjectType int
