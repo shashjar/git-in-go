@@ -154,8 +154,6 @@ func cloneHandler() {
 	}
 	repoDir = filepath.Clean(repoDir) + string(filepath.Separator)
 
-	if !strings.HasSuffix(repoDir, "/") {
-		repoDir = repoDir + "/"
 	cloneRepo(repoURL, repoDir)
 }
 
@@ -164,7 +162,6 @@ func lsFilesHandler(repoDir string) {
 		log.Fatal("Usage: ls-files [-s]")
 	}
 
-	cloneRepo(repoURL, repoDir)
 	os.Args = append(os.Args[0:1], os.Args[2:]...)
 	showDetailsPtr := flag.Bool("s", false, "Show entries' mode bits and object hash in the output")
 	flag.Parse()
