@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
+	"path/filepath"
 )
 
 func configureLogger() {
@@ -18,9 +18,7 @@ func getRepoDir() string {
 		os.Exit(1)
 	}
 
-	if !strings.HasSuffix(repoDir, "/") {
-		repoDir = repoDir + "/"
-	}
+	repoDir = filepath.Clean(repoDir) + string(filepath.Separator)
 
 	return repoDir
 }
@@ -51,6 +49,8 @@ func main() {
 		commitTreeHandler(repoDir)
 	case "clone":
 		cloneHandler()
+	case "ls-files":
+		lsFilesHandler(repoDir)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

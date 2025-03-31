@@ -1,12 +1,16 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
+
+// TODO: add documentation to each of these commands
 
 func initHandler(repoDir string) {
 	absPath, err := initRepo(repoDir)
@@ -148,10 +152,34 @@ func cloneHandler() {
 		repoURLParts := strings.Split(repoURL, "/")
 		repoDir = repoURLParts[len(repoURLParts)-1]
 	}
+	repoDir = filepath.Clean(repoDir) + string(filepath.Separator)
 
 	if !strings.HasSuffix(repoDir, "/") {
 		repoDir = repoDir + "/"
+	cloneRepo(repoURL, repoDir)
+}
+
+func lsFilesHandler(repoDir string) {
+	if len(os.Args) < 2 || len(os.Args) > 3 {
+		log.Fatal("Usage: ls-files [-s]")
 	}
 
 	cloneRepo(repoURL, repoDir)
+	os.Args = append(os.Args[0:1], os.Args[2:]...)
+	showDetailsPtr := flag.Bool("s", false, "Show entries' mode bits and object hash in the output")
+	flag.Parse()
+
+	entries, err := readIndex(repoDir)
+	if err != nil {
+		log.Fatalf("Failed to read entries within Git index file: %s\n", err)
+	}
+
+	for _, entry := range entries {
+		if *showDetailsPtr {
+			fmt.Printf("%06d %s %s\n", entry.mode, hex.EncodeToString(entry.sha1[:]), entry.path)
+		} else {
+			fmt.Println(entry.path)
+		}
+	}
+}
 }
