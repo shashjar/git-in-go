@@ -50,6 +50,37 @@ Run from the project root.
 ./run.sh clone https://github.com/shashjar/redis-in-go cloned-redis-in-go
 ```
 
+# `git ls-files`
+
+```
+./run.sh ls-files
+./run.sh ls-files -s
+```
+
+# `git add`
+
+```
+./run.sh add test.txt
+./run.sh add test_file_1.txt
+./run.sh add test_dir_1/test_file_2.txt
+./run.sh ls-files
+```
+
+```
+./run.sh add .
+./run.sh ls-files
+```
+
+# `git reset`
+
+```
+./run.sh add test.txt
+./run.sh add test_file_1.txt
+./run.sh ls-files
+./run.sh reset test_file_1.txt
+./run.sh ls-files
+```
+
 # Reading a zlib-compressed file
 
 ```

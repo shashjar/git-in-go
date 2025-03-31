@@ -70,6 +70,32 @@ func addFilesToIndex(paths []string, repoDir string) error {
 	return nil
 }
 
+func removeFilesFromIndex(paths []string, repoDir string) error {
+	currIndexEntries, err := readIndex(repoDir)
+	if err != nil {
+		return err
+	}
+
+	pathsSet := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		pathsSet[path] = true
+	}
+
+	entriesToKeep := []*IndexEntry{}
+	for _, entry := range currIndexEntries {
+		if _, removing := pathsSet[entry.path]; !removing {
+			entriesToKeep = append(entriesToKeep, entry)
+		}
+	}
+
+	err = writeIndex(entriesToKeep, repoDir)
+	if err != nil {
+		return fmt.Errorf("failed to write updated Git index file: %s", err)
+	}
+
+	return nil
+}
+
 func createIndexEntry(path string, repoDir string) (*IndexEntry, error) {
 	info, err := os.Stat(filepath.Join(repoDir, path))
 	if err != nil {

@@ -4,13 +4,12 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 )
-
-// TODO: add documentation to each of these commands
 
 func initHandler(repoDir string) {
 	absPath, err := initRepo(repoDir)
@@ -179,4 +178,69 @@ func lsFilesHandler(repoDir string) {
 		}
 	}
 }
+
+func addHandler(repoDir string) {
+	if len(os.Args) < 3 {
+		log.Fatal("Usage: `add <file> <file> ...` or `add .`")
+	}
+
+	addAll := len(os.Args) == 3 && os.Args[2] == "."
+
+	var filesToAdd []string
+	if addAll {
+		err := filepath.WalkDir(repoDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+
+			relPath, err := filepath.Rel(repoDir, path)
+			if err != nil {
+				return err
+			}
+
+			if relPath == "." || d.IsDir() || strings.HasPrefix(relPath, ".git") {
+				return nil
+			}
+
+			filesToAdd = append(filesToAdd, relPath)
+			return nil
+		})
+
+		if err != nil {
+			log.Fatalf("Failed to scan repository files: %s\n", err)
+		}
+	} else {
+		for _, file := range os.Args[2:] {
+			if _, err := os.Stat(filepath.Join(repoDir, file)); err != nil {
+				log.Fatalf("File does not exist: %s\n", file)
+			}
+
+			filesToAdd = append(filesToAdd, file)
+		}
+	}
+
+	err := addFilesToIndex(filesToAdd, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to add files to index: %s\n", err)
+	}
+}
+
+func resetHandler(repoDir string) {
+	if len(os.Args) < 3 {
+		log.Fatal("Usage: reset <file> <file> ...")
+	}
+
+	var filesToRemove []string
+	for _, file := range os.Args[2:] {
+		if _, err := os.Stat(filepath.Join(repoDir, file)); err != nil {
+			log.Fatalf("File does not exist: %s\n", file)
+		}
+
+		filesToRemove = append(filesToRemove, file)
+	}
+
+	err := removeFilesFromIndex(filesToRemove, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to remove files from index: %s\n", err)
+	}
 }

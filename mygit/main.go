@@ -51,6 +51,10 @@ func main() {
 		cloneHandler()
 	case "ls-files":
 		lsFilesHandler(repoDir)
+	case "add":
+		addHandler(repoDir)
+	case "reset":
+		resetHandler(repoDir)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
