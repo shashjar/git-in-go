@@ -18,7 +18,7 @@ const (
 	INDEX_CHECKSUM_LENGTH = 20
 )
 
-// Represents an entry in the Git index file
+// Represents an entry (representing a file in the repository) in the Git index file
 type IndexEntry struct {
 	cTimeSec     uint32
 	cTimeNanoSec uint32

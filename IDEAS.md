@@ -30,7 +30,7 @@ This is a living document storing some ideas for extensions & improvements that 
 
 ## Housekeeping/Tech Debt
 
-- [ ] Add documentation to each of the available commands in `commands.go`
+- [x] Add documentation to each of the available commands in `commands.go`
 - [ ] Update [README](README.md) with information about implementation and usage
 - [ ] Update `Git in Go` project document in Obsidian
 - [ ] Write a blog post or something that has better/clearer documentation of packfile object schemas than what's currently out there

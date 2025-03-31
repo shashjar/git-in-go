@@ -11,14 +11,24 @@ import (
 	"strings"
 )
 
+// Initializes the given directory as a Git repository by creating the .git directory and
+// any necessary Git metadata.
 func initHandler(repoDir string) {
+	if len(os.Args) != 2 {
+		log.Fatal("Usage: init")
+	}
+
 	absPath, err := initRepo(repoDir)
 	if err != nil {
 		log.Fatalf("Error initializing Git repository: %s\n", err)
 	}
-	log.Printf("Initialized empty Git repository in %s\n", absPath)
+	fmt.Printf("Initialized empty Git repository in %s\n", absPath)
 }
 
+// Prints the information associated with the given object, identified by hash.
+// -t --> Prints the type of the object.
+// -s --> Prints the size in bytes of the object's content.
+// -p --> Pretty-prints the object file, including header and content.
 func catFileHandler(repoDir string) {
 	flag := os.Args[2]
 	if len(os.Args) != 4 || (flag != "-t" && flag != "-s" && flag != "-p") {
@@ -48,6 +58,8 @@ func catFileHandler(repoDir string) {
 	}
 }
 
+// Creates a Git blob object for the repository file provided and prints the resulting object hash.
+// Must be executed with the -w flag for actually writing the object into the object database.
 func hashObjectHandler(repoDir string) {
 	if len(os.Args) != 4 || os.Args[2] != "-w" {
 		log.Fatal("Usage: hash-object -w <file>")
@@ -62,6 +74,8 @@ func hashObjectHandler(repoDir string) {
 	fmt.Println(blobObj.hash)
 }
 
+// Prints information on the entries in the given tree object, identified by hash.
+// --name-only --> Prints only the names of the entries in the given tree object.
 func lsTreeHandler(repoDir string) {
 	var nameOnly bool
 	if len(os.Args) == 3 {
@@ -88,6 +102,8 @@ func lsTreeHandler(repoDir string) {
 	}
 }
 
+// TODO: need to update write-tree since we now have an index/staging area. Also need to change stuff in TESTING.md related to this command.
+// TODO: once updated, write documentation for command
 func writeTreeHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: write-tree")
@@ -101,6 +117,10 @@ func writeTreeHandler(repoDir string) {
 	fmt.Println(treeObj.hash)
 }
 
+// Creates a new Git commit object from the tree object provided, identified by hash. Prints the
+// hash of the resulting commit object.
+// -p --> Identifies an optional parent commit hash for the new commit.
+// -m --> Identifies an optional message for the new commit.
 func commitTreeHandler(repoDir string) {
 	if len(os.Args) < 3 || len(os.Args) > 7 {
 		log.Fatal("Usage: commit-tree <tree_sha> [-p <parent_commit_sha>] [-m <commit_message>]")
@@ -133,6 +153,8 @@ func commitTreeHandler(repoDir string) {
 	fmt.Println(commitObj.hash)
 }
 
+// Clones the Git repository at the given URL into some local directory. The directory to clone into may be
+// specified by the user. If not specified, it will default to the basename of the remote repository.
 func cloneHandler() {
 	if len(os.Args) != 3 && len(os.Args) != 4 {
 		log.Fatal("Usage: clone <repo_url> [some_dir]")
@@ -156,6 +178,9 @@ func cloneHandler() {
 	cloneRepo(repoURL, repoDir)
 }
 
+// Prints information about the entries (representing repository files) in the Git index file. By default,
+// prints only the filepath of each entry.
+// -s --> Prints the mode and object hash for each entry, in addition to the path.
 func lsFilesHandler(repoDir string) {
 	if len(os.Args) < 2 || len(os.Args) > 3 {
 		log.Fatal("Usage: ls-files [-s]")
@@ -179,6 +204,8 @@ func lsFilesHandler(repoDir string) {
 	}
 }
 
+// Adds the list of provided files (identified by relative paths from the repository root) to the Git index.
+// If executed with ., adds all files in the repository to the Git index.
 func addHandler(repoDir string) {
 	if len(os.Args) < 3 {
 		log.Fatal("Usage: `add <file> <file> ...` or `add .`")
@@ -225,6 +252,8 @@ func addHandler(repoDir string) {
 	}
 }
 
+// Removes the list of provided files (identified by relative paths from the repository root)
+// from the Git index.
 func resetHandler(repoDir string) {
 	if len(os.Args) < 3 {
 		log.Fatal("Usage: reset <file> <file> ...")
