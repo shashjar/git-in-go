@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,4 +55,32 @@ func initRepo(repoDir string) (string, error) {
 	}
 
 	return absPath, nil
+}
+
+func getWorkingTreeFilePaths(repoDir string) ([]string, error) {
+	var workingTreeFiles []string
+
+	err := filepath.WalkDir(repoDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(repoDir, path)
+		if err != nil {
+			return err
+		}
+
+		if relPath == "." || d.IsDir() || strings.HasPrefix(relPath, ".git") {
+			return nil
+		}
+
+		workingTreeFiles = append(workingTreeFiles, relPath)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return workingTreeFiles, nil
 }

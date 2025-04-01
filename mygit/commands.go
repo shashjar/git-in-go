@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -215,26 +214,10 @@ func addHandler(repoDir string) {
 
 	var filesToAdd []string
 	if addAll {
-		err := filepath.WalkDir(repoDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			relPath, err := filepath.Rel(repoDir, path)
-			if err != nil {
-				return err
-			}
-
-			if relPath == "." || d.IsDir() || strings.HasPrefix(relPath, ".git") {
-				return nil
-			}
-
-			filesToAdd = append(filesToAdd, relPath)
-			return nil
-		})
-
+		var err error
+		filesToAdd, err = getWorkingTreeFilePaths(repoDir)
 		if err != nil {
-			log.Fatalf("Failed to scan repository files: %s\n", err)
+			log.Fatalf("Failed to scan repository for all files in working tree: %s\n", err)
 		}
 	} else {
 		for _, file := range os.Args[2:] {
