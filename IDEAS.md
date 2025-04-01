@@ -12,11 +12,11 @@ This is a living document storing some ideas for extensions & improvements that 
   - [x] `git write-tree`
   - [x] `git commit-tree`
   - [x] `git clone`
-- [ ] Implement the index/staging area
+- [x] Implement the index/staging area
   - [x] Add functionality for reading & writing the index file
   - [x] `git ls-files`
   - [x] `git add` / `git reset`
-  - [ ] `git status`
+  - [x] `git status`
 - [ ] Implement `git commit`
   - [ ] Use the `commit-tree` plumbing command to produce commit objects
 - [ ] Implement `git push`

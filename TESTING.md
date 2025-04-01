@@ -81,6 +81,12 @@ Run from the project root.
 ./run.sh ls-files
 ```
 
+# `git status`
+
+```
+./run.sh status
+```
+
 # Reading a zlib-compressed file
 
 ```

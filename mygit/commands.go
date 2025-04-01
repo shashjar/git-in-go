@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+const (
+	COLOR_RESET = "\033[0m"
+	COLOR_RED   = "\033[31m"
+	COLOR_GREEN = "\033[32m"
+)
+
 // Initializes the given directory as a Git repository by creating the .git directory and
 // any necessary Git metadata.
 func initHandler(repoDir string) {
@@ -254,5 +260,81 @@ func resetHandler(repoDir string) {
 	err := removeFilesFromIndex(filesToRemove, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to remove files from index: %s\n", err)
+	}
+}
+
+// Shows the status of the working tree to the user, including modified, deleted, and created/untracked files.
+func statusHandler(repoDir string) {
+	if len(os.Args) != 2 {
+		log.Fatal("Usage: status")
+	}
+
+	status, err := getRepoStatus(repoDir)
+	if err != nil {
+		log.Fatalf("Failed to determine status of repository: %s\n", err)
+	}
+
+	hasChanges := len(status.stagedFiles) > 0 || len(status.notStagedFiles) > 0 || len(status.untrackedFiles) > 0
+
+	fmt.Printf("On branch %s\n", status.branch)
+
+	if !hasChanges {
+		fmt.Printf("Your branch is up to date with 'origin/%s'.\n", status.branch)
+		fmt.Println("\nnothing to commit, working tree clean")
+		return
+	}
+
+	// Print staged changes
+	if len(status.stagedFiles) > 0 {
+		fmt.Println("\nChanges to be committed:")
+		fmt.Println("  (use \"git reset <file>...\" to unstage)")
+
+		for _, fs := range status.stagedFiles {
+			var statusStr string
+			switch fs.status {
+			case ModifiedStaged:
+				statusStr = "modified:"
+			case AddedStaged:
+				statusStr = "new file:"
+			case DeletedStaged:
+				statusStr = "deleted:"
+			default:
+				log.Fatalf("Unexpected status for staged file %s: %d\n", fs.path, fs.status)
+			}
+			fmt.Printf("\t%s%s\t%s%s\n", COLOR_GREEN, statusStr, fs.path, COLOR_RESET)
+		}
+	}
+
+	// Print not staged changes
+	if len(status.notStagedFiles) > 0 {
+		fmt.Println("\nChanges not staged for commit:")
+		fmt.Println("  (use \"git add/reset <file>...\" to update what will be committed)")
+
+		for _, fs := range status.notStagedFiles {
+			var statusStr string
+			switch fs.status {
+			case ModifiedNotStaged:
+				statusStr = "modified:"
+			case DeletedNotStaged:
+				statusStr = "deleted:"
+			default:
+				log.Fatalf("Unexpected status for unstaged file %s: %d\n", fs.path, fs.status)
+			}
+			fmt.Printf("\t%s%s\t%s%s\n", COLOR_RED, statusStr, fs.path, COLOR_RESET)
+		}
+	}
+
+	// Print untracked files
+	if len(status.untrackedFiles) > 0 {
+		fmt.Println("\nUntracked files:")
+		fmt.Println("  (use \"git add <file>...\" to include in what will be committed)")
+
+		for _, fs := range status.untrackedFiles {
+			fmt.Printf("\t%s%s%s\n", COLOR_RED, fs.path, COLOR_RESET)
+		}
+	}
+
+	if len(status.stagedFiles) == 0 {
+		fmt.Println("\nno changes added to commit (use \"git add\" and/or \"git commit -a\")")
 	}
 }

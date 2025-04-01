@@ -38,7 +38,7 @@ func validateRepoURL(repoURL string) error {
 }
 
 func initRepo(repoDir string) (string, error) {
-	for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
+	for _, dir := range []string{".git", ".git/objects", ".git/refs", ".git/refs/heads", ".git/refs/remotes"} {
 		if err := os.MkdirAll(repoDir+dir, 0755); err != nil {
 			return "", fmt.Errorf("error creating directory: %s", err)
 		}
@@ -55,6 +55,21 @@ func initRepo(repoDir string) (string, error) {
 	}
 
 	return absPath, nil
+}
+
+func getCurrentBranch(repoDir string) (string, error) {
+	headPath := filepath.Join(repoDir, ".git", "HEAD")
+	headData, err := os.ReadFile(headPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read HEAD file: %s", err)
+	}
+
+	headContent := string(headData)
+	if strings.HasPrefix(headContent, "ref: refs/heads/") {
+		return strings.TrimSpace(strings.TrimPrefix(headContent, "ref: refs/heads/")), nil
+	}
+
+	return "", fmt.Errorf("failed to get current branch: HEAD detached at %s", headContent[:7])
 }
 
 func getWorkingTreeFilePaths(repoDir string) ([]string, error) {

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -42,6 +43,12 @@ func cloneRepo(repoURL string, repoDir string) {
 	err = readPackfile(packfile, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to read packfile: %s\n", err)
+	}
+
+	masterRefPath := filepath.Join(repoDir, ".git", "refs", "heads", "master")
+	err = os.WriteFile(masterRefPath, []byte(headHash+"\n"), 0644)
+	if err != nil {
+		log.Fatalf("Failed to write master branch reference: %s\n", err)
 	}
 
 	err = checkoutCommit(headHash, repoDir)
