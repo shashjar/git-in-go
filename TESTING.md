@@ -88,6 +88,13 @@ Run from the project root.
 ./run.sh status
 ```
 
+# `git commit`
+
+```
+./run.sh commit
+./run.sh commit -m "I'm making a commit"
+```
+
 # Reading a zlib-compressed file
 
 ```

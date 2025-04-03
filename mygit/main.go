@@ -59,6 +59,8 @@ func main() {
 		resetHandler(repoDir)
 	case "status":
 		statusHandler(repoDir)
+	case "commit":
+		commitHandler(repoDir)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

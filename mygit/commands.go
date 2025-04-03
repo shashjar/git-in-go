@@ -351,3 +351,47 @@ func statusHandler(repoDir string) {
 		fmt.Println("\nno changes added to commit (use \"git add\" and/or \"git commit -a\")")
 	}
 }
+
+// Creates a new Git commit from the current contents of the index and with the optional commit message specified.
+// -m --> Identifies an optional message for the new commit.
+func commitHandler(repoDir string) {
+	if len(os.Args) < 2 || len(os.Args) > 4 {
+		log.Fatal("Usage: commit [-m <commit_message>]")
+	}
+
+	os.Args = append(os.Args[0:1], os.Args[2:]...)
+	commitMessagePtr := flag.String("m", "Made a commit!", "Commit message")
+	flag.Parse()
+
+	headCommitHash, commitsExist, err := resolveRef("HEAD", repoDir)
+	if err != nil {
+		log.Fatalf("Failed to resolve HEAD reference: %s\n", err)
+	}
+
+	parentCommitHashes := []string{}
+	if commitsExist {
+		parentCommitHashes = append(parentCommitHashes, headCommitHash)
+	}
+
+	treeObj, err := createTreeObjectFromIndex(repoDir)
+	if err != nil {
+		log.Fatalf("Could not create tree object from Git index: %s\n", err)
+	}
+
+	commitObj, err := createCommitObjectFromTree(treeObj.hash, parentCommitHashes, *commitMessagePtr, repoDir)
+	if err != nil {
+		log.Fatalf("Could not create commit object from tree: %s\n", err)
+	}
+
+	err = updateRef("HEAD", commitObj.hash, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to update HEAD reference: %s\n", err)
+	}
+
+	currBranch, err := getCurrentBranch(repoDir)
+	if err != nil {
+		log.Fatalf("Failed to determine the current branch: %s\n", err)
+	}
+
+	fmt.Printf("Committed: [%s %s] %s\n", currBranch, commitObj.hash, *commitMessagePtr)
+}

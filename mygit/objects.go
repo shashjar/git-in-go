@@ -531,7 +531,6 @@ func createTreeObjectFromIndex(repoDir string) (*TreeObject, error) {
 				dirToSubDirs[parentDir] = make(map[string]struct{})
 			}
 			dirToSubDirs[parentDir][currDir] = struct{}{}
-			fmt.Println("subDir:", currDir)
 			currDir = parentDir
 		}
 	}
