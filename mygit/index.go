@@ -124,7 +124,7 @@ func createIndexEntry(path string, repoDir string) (*IndexEntry, error) {
 		mTimeNanoSec: uint32(stat.Mtimespec.Nsec),
 		dev:          uint32(stat.Dev),
 		ino:          uint32(stat.Ino),
-		mode:         uint32(info.Mode()),
+		mode:         uint32(gitModeFromFileMode(info.Mode())),
 		uid:          stat.Uid,
 		gid:          stat.Gid,
 		fileSize:     uint32(info.Size()),

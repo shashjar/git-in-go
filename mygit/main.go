@@ -45,6 +45,8 @@ func main() {
 		lsTreeHandler(repoDir)
 	case "write-tree":
 		writeTreeHandler(repoDir)
+	case "write-working-tree":
+		writeWorkingTreeHandler(repoDir)
 	case "commit-tree":
 		commitTreeHandler(repoDir)
 	case "clone":

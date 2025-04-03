@@ -22,10 +22,11 @@ echo "hello world" > test.txt
 file repo/.git/objects/3b/18e512dba79e4c8300dd08aeb37f8e728b8dad
 ```
 
-# `git write-tree` & `git ls-tree`
+# `git write-tree`, `git write-working-tree`, & `git ls-tree`
 
 ```
 ./run.sh write-tree
+./run.sh write-working-tree
 ```
 
 Then use the outputted tree hash with

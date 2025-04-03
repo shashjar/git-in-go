@@ -17,6 +17,7 @@ This is a living document storing some ideas for extensions & improvements that 
   - [x] `git ls-files`
   - [x] `git add` / `git reset`
   - [x] `git status`
+  - [x] Update `git write-tree` to write a tree object from the index file instead of the working tree directory (preserve old functionality as `git write-working-tree`)
 - [ ] Implement `git commit`
   - [ ] Use the `commit-tree` plumbing command to produce commit objects
 - [ ] Implement `git push`

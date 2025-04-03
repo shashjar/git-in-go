@@ -107,16 +107,29 @@ func lsTreeHandler(repoDir string) {
 	}
 }
 
-// TODO: need to update write-tree since we now have an index/staging area. Also need to change stuff in TESTING.md related to this command.
-// TODO: once updated, write documentation for command
+// Creates a new Git tree object from the current Git index file. Prints the hash of the resulting tree object.
 func writeTreeHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: write-tree")
 	}
 
+	treeObj, err := createTreeObjectFromIndex(repoDir)
+	if err != nil {
+		log.Fatalf("Could not create tree object from Git index: %s\n", err)
+	}
+
+	fmt.Println(treeObj.hash)
+}
+
+// Creates a new Git tree object for the working tree of the given directory. Prints the hash of the resulting tree object.
+func writeWorkingTreeHandler(repoDir string) {
+	if len(os.Args) != 2 {
+		log.Fatal("Usage: write-working-tree")
+	}
+
 	treeObj, err := createTreeObjectFromDirectory(repoDir, repoDir)
 	if err != nil {
-		log.Fatalf("Could not create tree object for directory: %s\n", err)
+		log.Fatalf("Could not create tree object from working tree directory: %s\n", err)
 	}
 
 	fmt.Println(treeObj.hash)

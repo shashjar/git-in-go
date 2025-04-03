@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -303,6 +302,18 @@ func createObjectFile(objType ObjectType, contentBytes []byte, repoDir string) (
 	return objHash, nil
 }
 
+func gitModeFromFileMode(fileMode os.FileMode) int {
+	if fileMode.IsDir() {
+		return DIRECTORY_MODE
+	} else if fileMode&os.ModeSymlink != 0 {
+		return SYMBOLIC_LINK_MODE
+	} else if fileMode&0111 != 0 {
+		return EXECUTABLE_FILE_MODE
+	} else {
+		return REGULAR_FILE_MODE
+	}
+}
+
 /** BLOBS */
 
 func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
@@ -422,58 +433,7 @@ func readTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
 	}, nil
 }
 
-func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, error) {
-	dirEntries, err := os.ReadDir(dir)
-	if err != nil {
-		log.Fatalf("Could not read contents of directory")
-	}
-
-	entries := []TreeObjectEntry{}
-	for _, dirEntry := range dirEntries {
-		if strings.HasPrefix(dirEntry.Name(), ".") {
-			continue
-		}
-
-		fullPath := filepath.Join(dir, dirEntry.Name())
-
-		if dirEntry.IsDir() {
-			subDirTreeObj, err := createTreeObjectFromDirectory(fullPath, repoDir)
-			if err != nil {
-				return nil, err
-			}
-			entries = append(entries, TreeObjectEntry{
-				hash:    subDirTreeObj.hash,
-				mode:    DIRECTORY_MODE,
-				name:    dirEntry.Name(),
-				objType: Tree,
-			})
-		} else {
-			fileInfo, err := os.Lstat(fullPath)
-			if err != nil {
-				return nil, err
-			}
-
-			var mode int
-			if fileInfo.Mode()&os.ModeSymlink != 0 {
-				mode = SYMBOLIC_LINK_MODE
-			} else if fileInfo.Mode()&0111 != 0 {
-				mode = EXECUTABLE_FILE_MODE
-			} else {
-				mode = REGULAR_FILE_MODE
-			}
-
-			fileBlobObj, err := createBlobObjectFromFile(fullPath, repoDir)
-			if err != nil {
-				return nil, err
-			}
-			entries = append(entries, TreeObjectEntry{
-				hash:    fileBlobObj.hash,
-				mode:    mode,
-				name:    dirEntry.Name(),
-				objType: Blob,
-			})
-		}
-	}
+func createTreeObject(entries []TreeObjectEntry, repoDir string) (*TreeObject, error) {
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].name < entries[j].name
 	})
@@ -501,6 +461,136 @@ func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, err
 		sizeBytes: sizeBytes,
 		entries:   entries,
 	}, nil
+}
+
+func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, error) {
+	dirEntries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read contents of directory %s", dir)
+	}
+
+	entries := []TreeObjectEntry{}
+	for _, dirEntry := range dirEntries {
+		if strings.HasPrefix(dirEntry.Name(), ".") {
+			continue
+		}
+
+		fullPath := filepath.Join(dir, dirEntry.Name())
+
+		if dirEntry.IsDir() {
+			subDirTreeObj, err := createTreeObjectFromDirectory(fullPath, repoDir)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, TreeObjectEntry{
+				hash:    subDirTreeObj.hash,
+				mode:    DIRECTORY_MODE,
+				name:    dirEntry.Name(),
+				objType: Tree,
+			})
+		} else {
+			fileInfo, err := os.Lstat(fullPath)
+			if err != nil {
+				return nil, err
+			}
+
+			mode := gitModeFromFileMode(fileInfo.Mode())
+
+			fileBlobObj, err := createBlobObjectFromFile(fullPath, repoDir)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, TreeObjectEntry{
+				hash:    fileBlobObj.hash,
+				mode:    mode,
+				name:    dirEntry.Name(),
+				objType: Blob,
+			})
+		}
+	}
+
+	return createTreeObject(entries, repoDir)
+}
+
+func createTreeObjectFromIndex(repoDir string) (*TreeObject, error) {
+	indexEntries, err := readIndex(repoDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Git index file: %s", err)
+	}
+
+	dirSet := make(map[string]struct{})
+	dirSet["."] = struct{}{}
+	dirToSubDirs := make(map[string](map[string]struct{}))
+	for _, entry := range indexEntries {
+		path := entry.path
+		currDir := filepath.Dir(path)
+		for currDir != "." && currDir != "/" {
+			dirSet[currDir] = struct{}{}
+			parentDir := filepath.Dir(currDir)
+			if _, exists := dirToSubDirs[parentDir]; !exists {
+				dirToSubDirs[parentDir] = make(map[string]struct{})
+			}
+			dirToSubDirs[parentDir][currDir] = struct{}{}
+			fmt.Println("subDir:", currDir)
+			currDir = parentDir
+		}
+	}
+
+	dirToEntries := make(map[string][]TreeObjectEntry)
+	for _, indexEntry := range indexEntries {
+		dir := filepath.Dir(indexEntry.path)
+		entry := TreeObjectEntry{
+			hash:    hex.EncodeToString(indexEntry.sha1[:]),
+			mode:    int(indexEntry.mode),
+			name:    filepath.Base(indexEntry.path),
+			objType: Blob,
+		}
+		dirToEntries[dir] = append(dirToEntries[dir], entry)
+	}
+
+	for dir := range dirSet {
+		if _, exists := dirToSubDirs[dir]; !exists {
+			dirToSubDirs[dir] = make(map[string]struct{})
+		}
+		if _, exists := dirToEntries[dir]; !exists {
+			dirToEntries[dir] = []TreeObjectEntry{}
+		}
+	}
+
+	treeObj, err := createTreeObjectFromDirInfo(".", dirToSubDirs, dirToEntries, repoDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tree object from directory info: %s", err)
+	}
+
+	return treeObj, nil
+}
+
+func createTreeObjectFromDirInfo(dir string, dirToSubDirs map[string](map[string]struct{}), dirToEntries map[string][]TreeObjectEntry, repoDir string) (*TreeObject, error) {
+	subDirs, exists := dirToSubDirs[dir]
+	if !exists {
+		return nil, fmt.Errorf("directory %s does not exist in mapping to subdirectories", dir)
+	}
+
+	entries, exists := dirToEntries[dir]
+	if !exists {
+		return nil, fmt.Errorf("directory %s does not exist in mapping to tree object entries", dir)
+	}
+
+	for subDir, _ := range subDirs {
+		subDirTreeObj, err := createTreeObjectFromDirInfo(subDir, dirToSubDirs, dirToEntries, repoDir)
+		if err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, TreeObjectEntry{
+			hash:    subDirTreeObj.hash,
+			mode:    DIRECTORY_MODE,
+			name:    filepath.Base(subDir),
+			objType: Tree,
+		})
+	}
+
+	return createTreeObject(entries, repoDir)
 }
 
 /** COMMITS */
