@@ -35,8 +35,40 @@ type IndexEntry struct {
 	path         string
 }
 
-func addFilesToIndex(paths []string, repoDir string) error {
-	currIndexEntries, err := readIndex(repoDir)
+func ReadIndex(repoDir string) ([]*IndexEntry, error) {
+	indexPath := filepath.Join(repoDir, ".git", "index")
+
+	index, err := os.ReadFile(indexPath)
+	if err != nil && os.IsNotExist(err) {
+		return []*IndexEntry{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to read Git index file: %s", err)
+	}
+
+	err = verifyIndexChecksum(index)
+	if err != nil {
+		return nil, err
+	}
+	index = index[:len(index)-INDEX_CHECKSUM_LENGTH]
+
+	i := 0
+
+	numEntries, err := readIndexHeader(index)
+	if err != nil {
+		return nil, err
+	}
+	i += INDEX_HEADER_LENGTH
+
+	entries, err := readIndexEntries(index, i, numEntries)
+	if err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+func AddFilesToIndex(paths []string, repoDir string) error {
+	currIndexEntries, err := ReadIndex(repoDir)
 	if err != nil {
 		return err
 	}
@@ -70,8 +102,8 @@ func addFilesToIndex(paths []string, repoDir string) error {
 	return nil
 }
 
-func removeFilesFromIndex(paths []string, repoDir string) error {
-	currIndexEntries, err := readIndex(repoDir)
+func RemoveFilesFromIndex(paths []string, repoDir string) error {
+	currIndexEntries, err := ReadIndex(repoDir)
 	if err != nil {
 		return err
 	}
@@ -107,7 +139,7 @@ func createIndexEntry(path string, repoDir string) (*IndexEntry, error) {
 		return nil, fmt.Errorf("unable to create an index entry for a directory: '%s'", path)
 	}
 
-	blobObj, err := createBlobObjectFromFile(path, repoDir)
+	blobObj, err := CreateBlobObjectFromFile(path, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a blob object for this index entry: '%s'", path)
 	}
@@ -124,7 +156,7 @@ func createIndexEntry(path string, repoDir string) (*IndexEntry, error) {
 		mTimeNanoSec: uint32(stat.Mtimespec.Nsec),
 		dev:          uint32(stat.Dev),
 		ino:          uint32(stat.Ino),
-		mode:         uint32(gitModeFromFileMode(info.Mode())),
+		mode:         uint32(getGitModeFromFileMode(info.Mode())),
 		uid:          stat.Uid,
 		gid:          stat.Gid,
 		fileSize:     uint32(info.Size()),
@@ -185,38 +217,6 @@ func writeIndex(entries []*IndexEntry, repoDir string) error {
 	}
 
 	return nil
-}
-
-func readIndex(repoDir string) ([]*IndexEntry, error) {
-	indexPath := filepath.Join(repoDir, ".git", "index")
-
-	index, err := os.ReadFile(indexPath)
-	if err != nil && os.IsNotExist(err) {
-		return []*IndexEntry{}, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to read Git index file: %s", err)
-	}
-
-	err = verifyIndexChecksum(index)
-	if err != nil {
-		return nil, err
-	}
-	index = index[:len(index)-INDEX_CHECKSUM_LENGTH]
-
-	i := 0
-
-	numEntries, err := readIndexHeader(index)
-	if err != nil {
-		return nil, err
-	}
-	i += INDEX_HEADER_LENGTH
-
-	entries, err := readIndexEntries(index, i, numEntries)
-	if err != nil {
-		return nil, err
-	}
-
-	return entries, nil
 }
 
 func verifyIndexChecksum(index []byte) error {

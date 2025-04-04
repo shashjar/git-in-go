@@ -48,7 +48,7 @@ type PackfileRefDeltaObject struct {
 	deltaData   []byte
 }
 
-func readPackfile(packfile []byte, repoDir string) error {
+func ReadPackfile(packfile []byte, repoDir string) error {
 	err := verifyPackfileChecksum(packfile)
 	if err != nil {
 		return err
@@ -230,12 +230,12 @@ func readPackfileObject(packfile []byte, i int, repoDir string) (*PackfileRefDel
 		return nil, -1, err
 	}
 
-	objType, err := objTypeFromString(objTypeStr)
+	objType, err := ObjTypeFromString(objTypeStr)
 	if err != nil {
 		return nil, -1, err
 	}
 
-	_, err = createObjectFile(objType, decompressedObjData, repoDir)
+	_, err = CreateObjectFile(objType, decompressedObjData, repoDir)
 	if err != nil {
 		return nil, -1, fmt.Errorf("failed to create object file: %s", err)
 	}
@@ -274,14 +274,14 @@ func applyOfsDeltaPackfileObject(packfile []byte, i int, deltaObjStartPos int, p
 			return "", -1, err
 		}
 
-		targetObjType, _, baseObjContent, err = readObjectFile(baseObjHash, repoDir)
+		targetObjType, _, baseObjContent, err = ReadObjectFile(baseObjHash, repoDir)
 		if err != nil {
 			return "", -1, fmt.Errorf("failed to read base object referenced by delta object: %s", err)
 		}
 	} else if packfileObjectType == PACKFILE_OBJ_REF_DELTA {
 		return "", -1, fmt.Errorf("ofs_delta object referencing a ref_delta object as its base object is not supported")
 	} else {
-		targetObjType, err = objTypeFromString(packfileObjectType.toString())
+		targetObjType, err = ObjTypeFromString(packfileObjectType.toString())
 		if err != nil {
 			return "", -1, err
 		}
@@ -297,7 +297,7 @@ func applyOfsDeltaPackfileObject(packfile []byte, i int, deltaObjStartPos int, p
 		return "", -1, err
 	}
 
-	targetObjHash, err := createObjectFile(targetObjType, targetObjContent, repoDir)
+	targetObjHash, err := CreateObjectFile(targetObjType, targetObjContent, repoDir)
 	if err != nil {
 		return "", -1, err
 	}
@@ -326,7 +326,7 @@ func readRefDeltaPackfileObject(packfile []byte, i int, packfileObjectLength int
 
 func applyRefDeltas(refDeltaObjs []*PackfileRefDeltaObject, repoDir string) error {
 	for _, refDeltaObj := range refDeltaObjs {
-		objType, _, baseObjContent, err := readObjectFile(refDeltaObj.baseObjHash, repoDir)
+		objType, _, baseObjContent, err := ReadObjectFile(refDeltaObj.baseObjHash, repoDir)
 		if err != nil {
 			return fmt.Errorf("failed to read base object referenced by delta object: %s", err)
 		}
@@ -336,7 +336,7 @@ func applyRefDeltas(refDeltaObjs []*PackfileRefDeltaObject, repoDir string) erro
 			return err
 		}
 
-		_, err = createObjectFile(objType, targetObjContent, repoDir)
+		_, err = CreateObjectFile(objType, targetObjContent, repoDir)
 		if err != nil {
 			return err
 		}

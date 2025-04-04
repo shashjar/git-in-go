@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-func checkoutCommit(commitHash string, repoDir string) error {
-	commitObj, err := readCommitObjectFile(commitHash, repoDir)
+func CheckoutCommit(commitHash string, repoDir string) error {
+	commitObj, err := ReadCommitObjectFile(commitHash, repoDir)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func checkoutTree(treeHash string, currDir string, repoDir string) error {
 		return fmt.Errorf("failed to create directory %s: %w", currDir, err)
 	}
 
-	treeObj, err := readTreeObjectFile(treeHash, repoDir)
+	treeObj, err := ReadTreeObjectFile(treeHash, repoDir)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func checkoutTree(treeHash string, currDir string, repoDir string) error {
 }
 
 func checkoutBlob(blobHash string, filePath string, mode int, repoDir string) error {
-	blobObj, err := readBlobObjectFile(blobHash, repoDir)
+	blobObj, err := ReadBlobObjectFile(blobHash, repoDir)
 	if err != nil {
 		return err
 	}

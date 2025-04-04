@@ -33,7 +33,7 @@ type RepositoryStatus struct {
 	unmodifiedFiles []*RepositoryFileStatus
 }
 
-func getRepoStatus(repoDir string) (*RepositoryStatus, error) {
+func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 	stagedFiles := []*RepositoryFileStatus{}
 	notStagedFiles := []*RepositoryFileStatus{}
 	untrackedFiles := []*RepositoryFileStatus{}
@@ -54,7 +54,7 @@ func getRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		workingTreePathsSet[path] = true
 	}
 
-	currIndexEntries, err := readIndex(repoDir)
+	currIndexEntries, err := ReadIndex(repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func getRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		currIndexEntriesMap[entry.path] = entry
 	}
 
-	headCommitHash, commitsExist, err := resolveRef("HEAD", repoDir)
+	headCommitHash, commitsExist, err := ResolveRef("HEAD", repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +87,12 @@ func getRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		}, nil
 	}
 
-	headCommitObj, err := readCommitObjectFile(headCommitHash, repoDir)
+	headCommitObj, err := ReadCommitObjectFile(headCommitHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read HEAD commit object file: %s", err)
 	}
 
-	headTreeObj, err := readTreeObjectFile(headCommitObj.treeHash, repoDir)
+	headTreeObj, err := ReadTreeObjectFile(headCommitObj.treeHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read tree object file for HEAD commit: %s", err)
 	}
@@ -120,7 +120,7 @@ func getRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		if inIndex {
 			indexHash := hex.EncodeToString(indexEntry.sha1[:])
 
-			blobObj, err := createBlobObjectFromFile(path, repoDir)
+			blobObj, err := CreateBlobObjectFromFile(path, repoDir)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create blob object for %s", path)
 			}
@@ -197,7 +197,7 @@ func populateTreeEntriesMap(treeEntries map[string]string, treeObj *TreeObject, 
 		path := filepath.Join(pathPrefix, entry.name)
 
 		if entry.objType == Tree {
-			subTree, err := readTreeObjectFile(entry.hash, repoDir)
+			subTree, err := ReadTreeObjectFile(entry.hash, repoDir)
 			if err != nil {
 				return err
 			}

@@ -41,7 +41,7 @@ func (ot ObjectType) toString() string {
 	}
 }
 
-func objTypeFromString(objType string) (ObjectType, error) {
+func ObjTypeFromString(objType string) (ObjectType, error) {
 	if objType == Blob.toString() {
 		return Blob, nil
 	} else if objType == Tree.toString() {
@@ -100,14 +100,6 @@ type TreeObject struct {
 	entries   []TreeObjectEntry
 }
 
-// Represents an entry (either a blob or another tree) within a Git tree object
-type TreeObjectEntry struct {
-	hash    string
-	mode    int
-	name    string
-	objType ObjectType
-}
-
 func (t *TreeObject) GetObjectType() ObjectType {
 	return Tree
 }
@@ -123,6 +115,23 @@ func (t *TreeObject) PrettyPrint() string {
 		fmt.Fprintf(&sb, "%06d %s %s\n", entry.mode, entry.name, entry.hash)
 	}
 	return sb.String()
+}
+
+// Represents an entry (either a blob or another tree) within a Git tree object
+type TreeObjectEntry struct {
+	hash    string
+	mode    int
+	name    string
+	objType ObjectType
+}
+
+func (e *TreeObjectEntry) toString(nameOnly bool) string {
+	if nameOnly {
+		return e.name
+	} else {
+		mode := fmt.Sprintf("%06d", e.mode)
+		return fmt.Sprintf("%s %s %s    %s", mode, e.objType.toString(), e.hash, e.name)
+	}
 }
 
 // Represents a Git commit object, which represents a snapshot of the repository at a point in time
@@ -181,7 +190,7 @@ func isValidMode(mode int) bool {
 }
 
 func getObjectType(objHash string, repoDir string) (ObjectType, error) {
-	objType, _, _, err := readObjectFile(objHash, repoDir)
+	objType, _, _, err := ReadObjectFile(objHash, repoDir)
 	if err != nil {
 		return -1, err
 	}
@@ -197,7 +206,19 @@ func getObjectTypeFromMode(mode int) ObjectType {
 	}
 }
 
-func getObject(objHash string, repoDir string) (GitObject, error) {
+func getGitModeFromFileMode(fileMode os.FileMode) int {
+	if fileMode.IsDir() {
+		return DIRECTORY_MODE
+	} else if fileMode&os.ModeSymlink != 0 {
+		return SYMBOLIC_LINK_MODE
+	} else if fileMode&0111 != 0 {
+		return EXECUTABLE_FILE_MODE
+	} else {
+		return REGULAR_FILE_MODE
+	}
+}
+
+func GetObject(objHash string, repoDir string) (GitObject, error) {
 	objType, err := getObjectType(objHash, repoDir)
 	if err != nil {
 		return nil, err
@@ -206,19 +227,19 @@ func getObject(objHash string, repoDir string) (GitObject, error) {
 	var gitObj GitObject
 	switch objType {
 	case Blob:
-		blobObj, err := readBlobObjectFile(objHash, repoDir)
+		blobObj, err := ReadBlobObjectFile(objHash, repoDir)
 		if err != nil {
 			return nil, err
 		}
 		gitObj = blobObj
 	case Tree:
-		treeObj, err := readTreeObjectFile(objHash, repoDir)
+		treeObj, err := ReadTreeObjectFile(objHash, repoDir)
 		if err != nil {
 			return nil, err
 		}
 		gitObj = treeObj
 	case Commit:
-		commitObj, err := readCommitObjectFile(objHash, repoDir)
+		commitObj, err := ReadCommitObjectFile(objHash, repoDir)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +251,7 @@ func getObject(objHash string, repoDir string) (GitObject, error) {
 	return gitObj, nil
 }
 
-func readObjectFile(objHash string, repoDir string) (ObjectType, int, []byte, error) {
+func ReadObjectFile(objHash string, repoDir string) (ObjectType, int, []byte, error) {
 	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
 	file, err := os.Open(objPath)
 	if err != nil {
@@ -254,7 +275,7 @@ func readObjectFile(objHash string, repoDir string) (ObjectType, int, []byte, er
 	if len(headerParts) != 2 {
 		return -1, -1, nil, fmt.Errorf("invalid object header: %s", header)
 	}
-	headerObjType, err := objTypeFromString(headerObjTypeStr)
+	headerObjType, err := ObjTypeFromString(headerObjTypeStr)
 	if err != nil {
 		return -1, -1, nil, fmt.Errorf("invalid object type in header: %s", header)
 	}
@@ -269,7 +290,7 @@ func readObjectFile(objHash string, repoDir string) (ObjectType, int, []byte, er
 	return headerObjType, sizeBytes, content, nil
 }
 
-func createObjectFile(objType ObjectType, contentBytes []byte, repoDir string) (string, error) {
+func CreateObjectFile(objType ObjectType, contentBytes []byte, repoDir string) (string, error) {
 	sizeBytes := len(contentBytes)
 	header := fmt.Sprintf("%s %d\x00", objType.toString(), sizeBytes)
 	headerBytes := []byte(header)
@@ -302,22 +323,10 @@ func createObjectFile(objType ObjectType, contentBytes []byte, repoDir string) (
 	return objHash, nil
 }
 
-func gitModeFromFileMode(fileMode os.FileMode) int {
-	if fileMode.IsDir() {
-		return DIRECTORY_MODE
-	} else if fileMode&os.ModeSymlink != 0 {
-		return SYMBOLIC_LINK_MODE
-	} else if fileMode&0111 != 0 {
-		return EXECUTABLE_FILE_MODE
-	} else {
-		return REGULAR_FILE_MODE
-	}
-}
-
 /** BLOBS */
 
-func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
-	headerObjType, sizeBytes, content, err := readObjectFile(objHash, repoDir)
+func ReadBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
+	headerObjType, sizeBytes, content, err := ReadObjectFile(objHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read blob object file: %s", err)
 	}
@@ -333,14 +342,14 @@ func readBlobObjectFile(objHash string, repoDir string) (*BlobObject, error) {
 	}, nil
 }
 
-func createBlobObjectFromFile(filePath string, repoDir string) (*BlobObject, error) {
+func CreateBlobObjectFromFile(filePath string, repoDir string) (*BlobObject, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file")
 	}
 	sizeBytes := len(content)
 
-	blobObjHash, err := createObjectFile(Blob, content, repoDir)
+	blobObjHash, err := CreateObjectFile(Blob, content, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -354,43 +363,8 @@ func createBlobObjectFromFile(filePath string, repoDir string) (*BlobObject, err
 
 /** TREES */
 
-func (e *TreeObjectEntry) toString(nameOnly bool) string {
-	if nameOnly {
-		return e.name
-	} else {
-		mode := fmt.Sprintf("%06d", e.mode)
-		return fmt.Sprintf("%s %s %s    %s", mode, e.objType.toString(), e.hash, e.name)
-	}
-}
-
-func parseTreeObjectEntry(entryHeader string, entryHash string) (*TreeObjectEntry, error) {
-	entryHeaderParts := strings.Split(entryHeader, " ")
-	if len(entryHeaderParts) != 2 {
-		return nil, fmt.Errorf("tree object entry mode and name should be space-separated")
-	}
-
-	mode, err := strconv.Atoi(entryHeaderParts[0])
-	if err != nil {
-		return nil, fmt.Errorf("tree object entry mode should be an integer")
-	}
-	if !isValidMode(mode) {
-		return nil, fmt.Errorf("invalid tree object entry mode: %d", mode)
-	}
-
-	if !isValidObjectHash(entryHash) {
-		return nil, fmt.Errorf("invalid tree object entry hash: %s", entryHash)
-	}
-
-	return &TreeObjectEntry{
-		hash:    entryHash,
-		mode:    mode,
-		name:    entryHeaderParts[1],
-		objType: getObjectTypeFromMode(mode),
-	}, nil
-}
-
-func readTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
-	headerObjType, sizeBytes, content, err := readObjectFile(objHash, repoDir)
+func ReadTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
+	headerObjType, sizeBytes, content, err := ReadObjectFile(objHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read tree object file: %s", err)
 	}
@@ -433,37 +407,7 @@ func readTreeObjectFile(objHash string, repoDir string) (*TreeObject, error) {
 	}, nil
 }
 
-func createTreeObject(entries []TreeObjectEntry, repoDir string) (*TreeObject, error) {
-	sort.Slice(entries, func(i int, j int) bool {
-		return entries[i].name < entries[j].name
-	})
-
-	var contentBuilder strings.Builder
-	for _, entry := range entries {
-		fmt.Fprintf(&contentBuilder, "%d %s\x00", entry.mode, entry.name)
-
-		hashBytes, err := hex.DecodeString(entry.hash)
-		if err != nil {
-			return nil, fmt.Errorf("invalid hash format: %s", err)
-		}
-		contentBuilder.Write(hashBytes)
-	}
-	contentBytes := []byte(contentBuilder.String())
-	sizeBytes := len(contentBytes)
-
-	treeObjHash, err := createObjectFile(Tree, contentBytes, repoDir)
-	if err != nil {
-		return nil, err
-	}
-
-	return &TreeObject{
-		hash:      treeObjHash,
-		sizeBytes: sizeBytes,
-		entries:   entries,
-	}, nil
-}
-
-func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, error) {
+func CreateTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, error) {
 	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read contents of directory %s", dir)
@@ -478,7 +422,7 @@ func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, err
 		fullPath := filepath.Join(dir, dirEntry.Name())
 
 		if dirEntry.IsDir() {
-			subDirTreeObj, err := createTreeObjectFromDirectory(fullPath, repoDir)
+			subDirTreeObj, err := CreateTreeObjectFromDirectory(fullPath, repoDir)
 			if err != nil {
 				return nil, err
 			}
@@ -494,9 +438,9 @@ func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, err
 				return nil, err
 			}
 
-			mode := gitModeFromFileMode(fileInfo.Mode())
+			mode := getGitModeFromFileMode(fileInfo.Mode())
 
-			fileBlobObj, err := createBlobObjectFromFile(fullPath, repoDir)
+			fileBlobObj, err := CreateBlobObjectFromFile(fullPath, repoDir)
 			if err != nil {
 				return nil, err
 			}
@@ -512,8 +456,8 @@ func createTreeObjectFromDirectory(dir string, repoDir string) (*TreeObject, err
 	return createTreeObject(entries, repoDir)
 }
 
-func createTreeObjectFromIndex(repoDir string) (*TreeObject, error) {
-	indexEntries, err := readIndex(repoDir)
+func CreateTreeObjectFromIndex(repoDir string) (*TreeObject, error) {
+	indexEntries, err := ReadIndex(repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Git index file: %s", err)
 	}
@@ -564,6 +508,62 @@ func createTreeObjectFromIndex(repoDir string) (*TreeObject, error) {
 	return treeObj, nil
 }
 
+func parseTreeObjectEntry(entryHeader string, entryHash string) (*TreeObjectEntry, error) {
+	entryHeaderParts := strings.Split(entryHeader, " ")
+	if len(entryHeaderParts) != 2 {
+		return nil, fmt.Errorf("tree object entry mode and name should be space-separated")
+	}
+
+	mode, err := strconv.Atoi(entryHeaderParts[0])
+	if err != nil {
+		return nil, fmt.Errorf("tree object entry mode should be an integer")
+	}
+	if !isValidMode(mode) {
+		return nil, fmt.Errorf("invalid tree object entry mode: %d", mode)
+	}
+
+	if !isValidObjectHash(entryHash) {
+		return nil, fmt.Errorf("invalid tree object entry hash: %s", entryHash)
+	}
+
+	return &TreeObjectEntry{
+		hash:    entryHash,
+		mode:    mode,
+		name:    entryHeaderParts[1],
+		objType: getObjectTypeFromMode(mode),
+	}, nil
+}
+
+func createTreeObject(entries []TreeObjectEntry, repoDir string) (*TreeObject, error) {
+	sort.Slice(entries, func(i int, j int) bool {
+		return entries[i].name < entries[j].name
+	})
+
+	var contentBuilder strings.Builder
+	for _, entry := range entries {
+		fmt.Fprintf(&contentBuilder, "%d %s\x00", entry.mode, entry.name)
+
+		hashBytes, err := hex.DecodeString(entry.hash)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hash format: %s", err)
+		}
+		contentBuilder.Write(hashBytes)
+	}
+	contentBytes := []byte(contentBuilder.String())
+	sizeBytes := len(contentBytes)
+
+	treeObjHash, err := CreateObjectFile(Tree, contentBytes, repoDir)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TreeObject{
+		hash:      treeObjHash,
+		sizeBytes: sizeBytes,
+		entries:   entries,
+	}, nil
+}
+
 func createTreeObjectFromDirInfo(dir string, dirToSubDirs map[string](map[string]struct{}), dirToEntries map[string][]TreeObjectEntry, repoDir string) (*TreeObject, error) {
 	subDirs, exists := dirToSubDirs[dir]
 	if !exists {
@@ -594,8 +594,8 @@ func createTreeObjectFromDirInfo(dir string, dirToSubDirs map[string](map[string
 
 /** COMMITS */
 
-func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error) {
-	headerObjType, sizeBytes, content, err := readObjectFile(objHash, repoDir)
+func ReadCommitObjectFile(objHash string, repoDir string) (*CommitObject, error) {
+	headerObjType, sizeBytes, content, err := ReadObjectFile(objHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read commit object file: %s", err)
 	}
@@ -633,7 +633,7 @@ func readCommitObjectFile(objHash string, repoDir string) (*CommitObject, error)
 	}, nil
 }
 
-func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string, repoDir string) (*CommitObject, error) {
+func CreateCommitObjectFromTree(treeHash string, parentCommitHashes []string, commitMessage string, repoDir string) (*CommitObject, error) {
 	var contentBuilder strings.Builder
 	fmt.Fprintf(&contentBuilder, "tree %s\n", treeHash)
 
@@ -661,7 +661,7 @@ func createCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 
 	contentBytes := []byte(contentBuilder.String())
 	sizeBytes := len(contentBytes)
-	commitObjHash, err := createObjectFile(Commit, contentBytes, repoDir)
+	commitObjHash, err := CreateObjectFile(Commit, contentBytes, repoDir)
 	if err != nil {
 		return nil, err
 	}

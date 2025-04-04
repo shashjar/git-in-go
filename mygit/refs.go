@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func resolveRef(refName string, repoDir string) (string, bool, error) {
+func ResolveRef(refName string, repoDir string) (string, bool, error) {
 	if refName == "HEAD" {
 		headPath := filepath.Join(repoDir, ".git", "HEAD")
 		headContent, err := os.ReadFile(headPath)
@@ -49,7 +49,7 @@ func resolveRef(refName string, repoDir string) (string, bool, error) {
 	return strings.TrimSpace(string(branchRefContent)), true, nil
 }
 
-func updateRef(refName string, hash string, repoDir string) error {
+func UpdateRef(refName string, hash string, repoDir string) error {
 	if refName == "HEAD" {
 		headPath := filepath.Join(repoDir, ".git", "HEAD")
 		headContent, err := os.ReadFile(headPath)

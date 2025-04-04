@@ -18,7 +18,7 @@ const (
 
 // Initializes the given directory as a Git repository by creating the .git directory and
 // any necessary Git metadata.
-func initHandler(repoDir string) {
+func InitHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: init")
 	}
@@ -34,7 +34,7 @@ func initHandler(repoDir string) {
 // -t --> Prints the type of the object.
 // -s --> Prints the size in bytes of the object's content.
 // -p --> Pretty-prints the object file, including header and content.
-func catFileHandler(repoDir string) {
+func CatFileHandler(repoDir string) {
 	flag := os.Args[2]
 	if len(os.Args) != 4 || (flag != "-t" && flag != "-s" && flag != "-p") {
 		log.Fatal("Usage: cat-file (-t | -s | -p) <object_sha>")
@@ -45,7 +45,7 @@ func catFileHandler(repoDir string) {
 		log.Fatalf("Invalid object hash: %s\n", objHash)
 	}
 
-	obj, err := getObject(objHash, repoDir)
+	obj, err := GetObject(objHash, repoDir)
 	if err != nil {
 		log.Fatalf("Could not read object file: %s\n", err)
 	}
@@ -65,13 +65,13 @@ func catFileHandler(repoDir string) {
 
 // Creates a Git blob object for the repository file provided and prints the resulting object hash.
 // Must be executed with the -w flag for actually writing the object into the object database.
-func hashObjectHandler(repoDir string) {
+func HashObjectHandler(repoDir string) {
 	if len(os.Args) != 4 || os.Args[2] != "-w" {
 		log.Fatal("Usage: hash-object -w <file>")
 	}
 
 	filePath := os.Args[3]
-	blobObj, err := createBlobObjectFromFile(repoDir+filePath, repoDir)
+	blobObj, err := CreateBlobObjectFromFile(repoDir+filePath, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create blob object from file: %s\n", err)
 	}
@@ -81,7 +81,7 @@ func hashObjectHandler(repoDir string) {
 
 // Prints information on the entries in the given tree object, identified by hash.
 // --name-only --> Prints only the names of the entries in the given tree object.
-func lsTreeHandler(repoDir string) {
+func LsTreeHandler(repoDir string) {
 	var nameOnly bool
 	if len(os.Args) == 3 {
 		nameOnly = false
@@ -96,7 +96,7 @@ func lsTreeHandler(repoDir string) {
 		log.Fatalf("Invalid object hash: %s\n", treeHash)
 	}
 
-	treeObj, err := readTreeObjectFile(treeHash, repoDir)
+	treeObj, err := ReadTreeObjectFile(treeHash, repoDir)
 	if err != nil {
 		log.Fatalf("Could not read tree object file: %s\n", err)
 	}
@@ -108,12 +108,12 @@ func lsTreeHandler(repoDir string) {
 }
 
 // Creates a new Git tree object from the current Git index file. Prints the hash of the resulting tree object.
-func writeTreeHandler(repoDir string) {
+func WriteTreeHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: write-tree")
 	}
 
-	treeObj, err := createTreeObjectFromIndex(repoDir)
+	treeObj, err := CreateTreeObjectFromIndex(repoDir)
 	if err != nil {
 		log.Fatalf("Could not create tree object from Git index: %s\n", err)
 	}
@@ -122,12 +122,12 @@ func writeTreeHandler(repoDir string) {
 }
 
 // Creates a new Git tree object for the working tree of the given directory. Prints the hash of the resulting tree object.
-func writeWorkingTreeHandler(repoDir string) {
+func WriteWorkingTreeHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: write-working-tree")
 	}
 
-	treeObj, err := createTreeObjectFromDirectory(repoDir, repoDir)
+	treeObj, err := CreateTreeObjectFromDirectory(repoDir, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create tree object from working tree directory: %s\n", err)
 	}
@@ -139,7 +139,7 @@ func writeWorkingTreeHandler(repoDir string) {
 // hash of the resulting commit object.
 // -p --> Identifies an optional parent commit hash for the new commit.
 // -m --> Identifies an optional message for the new commit.
-func commitTreeHandler(repoDir string) {
+func CommitTreeHandler(repoDir string) {
 	if len(os.Args) < 3 || len(os.Args) > 7 {
 		log.Fatal("Usage: commit-tree <tree_sha> [-p <parent_commit_sha>] [-m <commit_message>]")
 	}
@@ -163,7 +163,7 @@ func commitTreeHandler(repoDir string) {
 		parentCommitHashes = append(parentCommitHashes, *parentCommitHashPtr)
 	}
 
-	commitObj, err := createCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr, repoDir)
+	commitObj, err := CreateCommitObjectFromTree(treeHash, parentCommitHashes, *commitMessagePtr, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create commit object from tree: %s\n", err)
 	}
@@ -173,7 +173,7 @@ func commitTreeHandler(repoDir string) {
 
 // Clones the Git repository at the given URL into some local directory. The directory to clone into may be
 // specified by the user. If not specified, it will default to the basename of the remote repository.
-func cloneHandler() {
+func CloneHandler() {
 	if len(os.Args) != 3 && len(os.Args) != 4 {
 		log.Fatal("Usage: clone <repo_url> [some_dir]")
 	}
@@ -193,13 +193,13 @@ func cloneHandler() {
 	}
 	repoDir = filepath.Clean(repoDir) + string(filepath.Separator)
 
-	cloneRepo(repoURL, repoDir)
+	CloneRepo(repoURL, repoDir)
 }
 
 // Prints information about the entries (representing repository files) in the Git index file. By default,
 // prints only the filepath of each entry.
 // -s --> Prints the mode and object hash for each entry, in addition to the path.
-func lsFilesHandler(repoDir string) {
+func LSFilesHandler(repoDir string) {
 	if len(os.Args) < 2 || len(os.Args) > 3 {
 		log.Fatal("Usage: ls-files [-s]")
 	}
@@ -208,7 +208,7 @@ func lsFilesHandler(repoDir string) {
 	showDetailsPtr := flag.Bool("s", false, "Show entries' mode bits and object hash in the output")
 	flag.Parse()
 
-	entries, err := readIndex(repoDir)
+	entries, err := ReadIndex(repoDir)
 	if err != nil {
 		log.Fatalf("Failed to read entries within Git index file: %s\n", err)
 	}
@@ -224,7 +224,7 @@ func lsFilesHandler(repoDir string) {
 
 // Adds the list of provided files (identified by relative paths from the repository root) to the Git index.
 // If executed with ., adds all files in the repository to the Git index.
-func addHandler(repoDir string) {
+func AddHandler(repoDir string) {
 	if len(os.Args) < 3 {
 		log.Fatal("Usage: `add <file> <file> ...` or `add .`")
 	}
@@ -248,7 +248,7 @@ func addHandler(repoDir string) {
 		}
 	}
 
-	err := addFilesToIndex(filesToAdd, repoDir)
+	err := AddFilesToIndex(filesToAdd, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to add files to index: %s\n", err)
 	}
@@ -256,7 +256,7 @@ func addHandler(repoDir string) {
 
 // Removes the list of provided files (identified by relative paths from the repository root)
 // from the Git index.
-func resetHandler(repoDir string) {
+func ResetHandler(repoDir string) {
 	if len(os.Args) < 3 {
 		log.Fatal("Usage: reset <file> <file> ...")
 	}
@@ -270,19 +270,19 @@ func resetHandler(repoDir string) {
 		filesToRemove = append(filesToRemove, file)
 	}
 
-	err := removeFilesFromIndex(filesToRemove, repoDir)
+	err := RemoveFilesFromIndex(filesToRemove, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to remove files from index: %s\n", err)
 	}
 }
 
 // Shows the status of the working tree to the user, including modified, deleted, and created/untracked files.
-func statusHandler(repoDir string) {
+func StatusHandler(repoDir string) {
 	if len(os.Args) != 2 {
 		log.Fatal("Usage: status")
 	}
 
-	status, err := getRepoStatus(repoDir)
+	status, err := GetRepoStatus(repoDir)
 	if err != nil {
 		log.Fatalf("Failed to determine status of repository: %s\n", err)
 	}
@@ -354,7 +354,7 @@ func statusHandler(repoDir string) {
 
 // Creates a new Git commit from the current contents of the index and with the optional commit message specified.
 // -m --> Identifies an optional message for the new commit.
-func commitHandler(repoDir string) {
+func CommitHandler(repoDir string) {
 	if len(os.Args) < 2 || len(os.Args) > 4 {
 		log.Fatal("Usage: commit [-m <commit_message>]")
 	}
@@ -363,7 +363,7 @@ func commitHandler(repoDir string) {
 	commitMessagePtr := flag.String("m", "Made a commit!", "Commit message")
 	flag.Parse()
 
-	headCommitHash, commitsExist, err := resolveRef("HEAD", repoDir)
+	headCommitHash, commitsExist, err := ResolveRef("HEAD", repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve HEAD reference: %s\n", err)
 	}
@@ -373,17 +373,17 @@ func commitHandler(repoDir string) {
 		parentCommitHashes = append(parentCommitHashes, headCommitHash)
 	}
 
-	treeObj, err := createTreeObjectFromIndex(repoDir)
+	treeObj, err := CreateTreeObjectFromIndex(repoDir)
 	if err != nil {
 		log.Fatalf("Could not create tree object from Git index: %s\n", err)
 	}
 
-	commitObj, err := createCommitObjectFromTree(treeObj.hash, parentCommitHashes, *commitMessagePtr, repoDir)
+	commitObj, err := CreateCommitObjectFromTree(treeObj.hash, parentCommitHashes, *commitMessagePtr, repoDir)
 	if err != nil {
 		log.Fatalf("Could not create commit object from tree: %s\n", err)
 	}
 
-	err = updateRef("HEAD", commitObj.hash, repoDir)
+	err = UpdateRef("HEAD", commitObj.hash, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to update HEAD reference: %s\n", err)
 	}

@@ -36,31 +36,31 @@ func main() {
 
 	switch command := os.Args[1]; command {
 	case "init":
-		initHandler(repoDir)
+		InitHandler(repoDir)
 	case "cat-file":
-		catFileHandler(repoDir)
+		CatFileHandler(repoDir)
 	case "hash-object":
-		hashObjectHandler(repoDir)
+		HashObjectHandler(repoDir)
 	case "ls-tree":
-		lsTreeHandler(repoDir)
+		LsTreeHandler(repoDir)
 	case "write-tree":
-		writeTreeHandler(repoDir)
+		WriteTreeHandler(repoDir)
 	case "write-working-tree":
-		writeWorkingTreeHandler(repoDir)
+		WriteWorkingTreeHandler(repoDir)
 	case "commit-tree":
-		commitTreeHandler(repoDir)
+		CommitTreeHandler(repoDir)
 	case "clone":
-		cloneHandler()
+		CloneHandler()
 	case "ls-files":
-		lsFilesHandler(repoDir)
+		LSFilesHandler(repoDir)
 	case "add":
-		addHandler(repoDir)
+		AddHandler(repoDir)
 	case "reset":
-		resetHandler(repoDir)
+		ResetHandler(repoDir)
 	case "status":
-		statusHandler(repoDir)
+		StatusHandler(repoDir)
 	case "commit":
-		commitHandler(repoDir)
+		CommitHandler(repoDir)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

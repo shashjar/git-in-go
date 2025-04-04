@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func cloneRepo(repoURL string, repoDir string) {
+func CloneRepo(repoURL string, repoDir string) {
 	info, err := os.Stat(repoDir)
 	if !os.IsNotExist(err) && info.IsDir() {
 		log.Fatalf("Destination path '%s' already exists", repoDir)
@@ -40,7 +40,7 @@ func cloneRepo(repoURL string, repoDir string) {
 		log.Fatalf("Failed to perform git-upload-pack request: %s\n", err)
 	}
 
-	err = readPackfile(packfile, repoDir)
+	err = ReadPackfile(packfile, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to read packfile: %s\n", err)
 	}
@@ -51,7 +51,7 @@ func cloneRepo(repoURL string, repoDir string) {
 		log.Fatalf("Failed to write master branch reference: %s\n", err)
 	}
 
-	err = checkoutCommit(headHash, repoDir)
+	err = CheckoutCommit(headHash, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to check out HEAD commit: %s\n", err)
 	}
