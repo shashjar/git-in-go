@@ -21,7 +21,7 @@ This is a living document storing some ideas for extensions & improvements that 
 - [x] Implement `git commit`
   - [x] Use the `commit-tree` plumbing command to produce commit objects
 - [ ] Implement `git push`
-  - [ ] Implement the functionality for encoding a list of Git objects as a packfile
+  - [x] Implement the functionality for encoding a list of Git objects as a packfile
   - [ ] Implement the functionality for comparing the remote HEAD with the local HEAD and determining which objects are missing from the remote commit (and therefore need to be included in the packfile when `push`ing)
   - [ ] Write the main `push` handler, making the HTTP request to the remote repo with the user's username and password and the packfile
 - [ ] Implement creation and checking out of branches

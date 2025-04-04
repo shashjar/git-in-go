@@ -25,6 +25,25 @@ func zlibCompress(w io.Writer, b []byte) error {
 	return nil
 }
 
+func zlibCompressBytes(b []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := zlib.NewWriter(&buf)
+	defer zw.Close()
+
+	n, err := zw.Write(b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compress data with zlib: %s", err)
+	}
+	if n != len(b) {
+		return nil, fmt.Errorf("failed to write complete byte contents with zlib")
+	}
+	if err := zw.Flush(); err != nil {
+		return nil, fmt.Errorf("failed to flush zlib writer: %s", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 func zlibDecompress(r io.Reader) ([]byte, error) {
 	zr, err := zlib.NewReader(r)
 	if err != nil {
