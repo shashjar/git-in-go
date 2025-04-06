@@ -252,7 +252,7 @@ func GetObject(objHash string, repoDir string) (GitObject, error) {
 }
 
 func ReadObjectFile(objHash string, repoDir string) (ObjectType, int, []byte, error) {
-	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
+	objPath := filepath.Join(repoDir, ".git", "objects", objHash[:2], objHash[2:])
 	file, err := os.Open(objPath)
 	if err != nil {
 		return -1, -1, nil, fmt.Errorf("failed to open object file")
@@ -302,7 +302,7 @@ func CreateObjectFile(objType ObjectType, contentBytes []byte, repoDir string) (
 	objHashBytes := sha1.Sum(fileBytes)
 	objHash := hex.EncodeToString(objHashBytes[:])
 
-	objPath := repoDir + fmt.Sprintf(".git/objects/%s/%s", objHash[:2], objHash[2:])
+	objPath := filepath.Join(repoDir, ".git", "objects", objHash[:2], objHash[2:])
 
 	dir := filepath.Dir(objPath)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {

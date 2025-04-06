@@ -39,17 +39,17 @@ func validateRepoURL(repoURL string) error {
 
 func initRepo(repoDir string) (string, error) {
 	for _, dir := range []string{".git", ".git/objects", ".git/refs", ".git/refs/heads", ".git/refs/remotes"} {
-		if err := os.MkdirAll(repoDir+dir, 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(repoDir, dir), 0755); err != nil {
 			return "", fmt.Errorf("error creating directory: %s", err)
 		}
 	}
 
 	headFileContents := []byte("ref: refs/heads/master\n")
-	if err := os.WriteFile(repoDir+".git/HEAD", headFileContents, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoDir, ".git", "HEAD"), headFileContents, 0644); err != nil {
 		return "", fmt.Errorf("error writing HEAD file: %s", err)
 	}
 
-	absPath, err := filepath.Abs(repoDir + ".git")
+	absPath, err := filepath.Abs(filepath.Join(repoDir, ".git"))
 	if err != nil {
 		return "", fmt.Errorf("error getting absolute path of Git repository: %s", err)
 	}

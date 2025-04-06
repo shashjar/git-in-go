@@ -71,7 +71,7 @@ func HashObjectHandler(repoDir string) {
 	}
 
 	filePath := os.Args[3]
-	blobObj, err := CreateBlobObjectFromFile(repoDir+filePath, repoDir)
+	blobObj, err := CreateBlobObjectFromFile(filepath.Join(repoDir, filePath), repoDir)
 	if err != nil {
 		log.Fatalf("Could not create blob object from file: %s\n", err)
 	}
