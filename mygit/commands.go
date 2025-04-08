@@ -291,8 +291,11 @@ func StatusHandler(repoDir string) {
 
 	fmt.Printf("On branch %s\n", status.branch)
 
+	if status.headCommitHashLocal != status.headCommitHashRemote {
+		fmt.Printf("Your local HEAD %s differs from remote HEAD for 'origin/%s': %s.\n", status.headCommitHashLocal, status.branch, status.headCommitHashRemote)
+	}
+
 	if !hasChanges {
-		fmt.Printf("Your branch is up to date with 'origin/%s'.\n", status.branch)
 		fmt.Println("\nnothing to commit, working tree clean")
 		return
 	}
@@ -363,7 +366,7 @@ func CommitHandler(repoDir string) {
 	commitMessagePtr := flag.String("m", "Made a commit!", "Commit message")
 	flag.Parse()
 
-	headCommitHash, commitsExist, err := ResolveRef("HEAD", repoDir)
+	headCommitHash, commitsExist, err := ResolveRef("HEAD", false, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve HEAD reference: %s\n", err)
 	}
@@ -383,7 +386,7 @@ func CommitHandler(repoDir string) {
 		log.Fatalf("Could not create commit object from tree: %s\n", err)
 	}
 
-	err = UpdateRef("HEAD", commitObj.hash, repoDir)
+	err = UpdateRef("HEAD", commitObj.hash, false, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to update HEAD reference: %s\n", err)
 	}

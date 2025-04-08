@@ -45,10 +45,9 @@ func CloneRepo(repoURL string, repoDir string) {
 		log.Fatalf("Failed to read packfile: %s\n", err)
 	}
 
-	masterRefPath := filepath.Join(repoDir, ".git", "refs", "heads", "master")
-	err = os.WriteFile(masterRefPath, []byte(headHash+"\n"), 0644)
+	err = createRefs(headHash, repoDir)
 	if err != nil {
-		log.Fatalf("Failed to write master branch reference: %s\n", err)
+		log.Fatalf("Failed to create refs: %s\n", err)
 	}
 
 	err = CheckoutCommit(headHash, repoDir)
@@ -127,4 +126,20 @@ func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, string, e
 	}
 
 	return uploadPackBody[8:], headHash, nil
+}
+
+func createRefs(headHash string, repoDir string) error {
+	masterRefPathLocal := filepath.Join(repoDir, ".git", "refs", "heads", "master")
+	err := os.WriteFile(masterRefPathLocal, []byte(headHash+"\n"), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write master branch local reference: %s", err)
+	}
+
+	masterRefPathRemote := filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "master")
+	err = os.WriteFile(masterRefPathRemote, []byte(headHash+"\n"), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write master branch remote reference: %s", err)
+	}
+
+	return nil
 }

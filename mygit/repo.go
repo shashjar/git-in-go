@@ -44,9 +44,14 @@ func initRepo(repoDir string) (string, error) {
 		}
 	}
 
-	headFileContents := []byte("ref: refs/heads/master\n")
-	if err := os.WriteFile(filepath.Join(repoDir, ".git", "HEAD"), headFileContents, 0644); err != nil {
-		return "", fmt.Errorf("error writing HEAD file: %s", err)
+	headFileContentsLocal := []byte("ref: refs/heads/master\n")
+	if err := os.WriteFile(filepath.Join(repoDir, ".git", "HEAD"), headFileContentsLocal, 0644); err != nil {
+		return "", fmt.Errorf("error writing local HEAD file: %s", err)
+	}
+
+	headFileContentsRemote := []byte("ref: refs/remotes/origin/master\n")
+	if err := os.WriteFile(filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD"), headFileContentsRemote, 0644); err != nil {
+		return "", fmt.Errorf("error writing remote HEAD file: %s", err)
 	}
 
 	absPath, err := filepath.Abs(filepath.Join(repoDir, ".git"))

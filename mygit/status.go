@@ -26,11 +26,13 @@ type RepositoryFileStatus struct {
 
 // Represents the status of the entire repository
 type RepositoryStatus struct {
-	branch          string
-	stagedFiles     []*RepositoryFileStatus
-	notStagedFiles  []*RepositoryFileStatus
-	untrackedFiles  []*RepositoryFileStatus
-	unmodifiedFiles []*RepositoryFileStatus
+	branch               string
+	headCommitHashLocal  string
+	headCommitHashRemote string
+	stagedFiles          []*RepositoryFileStatus
+	notStagedFiles       []*RepositoryFileStatus
+	untrackedFiles       []*RepositoryFileStatus
+	unmodifiedFiles      []*RepositoryFileStatus
 }
 
 func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
@@ -64,7 +66,7 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		currIndexEntriesMap[entry.path] = entry
 	}
 
-	headCommitHash, commitsExist, err := ResolveRef("HEAD", repoDir)
+	headCommitHashLocal, commitsExist, err := ResolveRef("HEAD", false, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -79,15 +81,22 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		}
 
 		return &RepositoryStatus{
-			branch:          branch,
-			stagedFiles:     stagedFiles,
-			notStagedFiles:  notStagedFiles,
-			untrackedFiles:  untrackedFiles,
-			unmodifiedFiles: unmodifiedFiles,
+			branch:               branch,
+			headCommitHashLocal:  headCommitHashLocal,
+			headCommitHashRemote: "",
+			stagedFiles:          stagedFiles,
+			notStagedFiles:       notStagedFiles,
+			untrackedFiles:       untrackedFiles,
+			unmodifiedFiles:      unmodifiedFiles,
 		}, nil
 	}
 
-	headCommitObj, err := ReadCommitObjectFile(headCommitHash, repoDir)
+	headCommitHashRemote, _, err := ResolveRef("HEAD", true, repoDir)
+	if err != nil {
+		return nil, err
+	}
+
+	headCommitObj, err := ReadCommitObjectFile(headCommitHashLocal, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read HEAD commit object file: %s", err)
 	}
@@ -184,11 +193,13 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 	}
 
 	return &RepositoryStatus{
-		branch:          branch,
-		stagedFiles:     stagedFiles,
-		notStagedFiles:  notStagedFiles,
-		untrackedFiles:  untrackedFiles,
-		unmodifiedFiles: unmodifiedFiles,
+		branch:               branch,
+		headCommitHashLocal:  headCommitHashLocal,
+		headCommitHashRemote: headCommitHashRemote,
+		stagedFiles:          stagedFiles,
+		notStagedFiles:       notStagedFiles,
+		untrackedFiles:       untrackedFiles,
+		unmodifiedFiles:      unmodifiedFiles,
 	}, nil
 }
 

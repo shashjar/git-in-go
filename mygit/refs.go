@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// TODO: needs to update how refs are created and resolved: clone, status, commit, push, pull
-
 func ResolveRef(refName string, remote bool, repoDir string) (string, bool, error) {
 	if refName == "HEAD" {
 		var headPath string
