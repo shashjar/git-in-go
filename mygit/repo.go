@@ -38,7 +38,7 @@ func validateRepoURL(repoURL string) error {
 }
 
 func initRepo(repoDir string) (string, error) {
-	for _, dir := range []string{".git", ".git/objects", ".git/refs", ".git/refs/heads", ".git/refs/remotes"} {
+	for _, dir := range []string{".git", ".git/objects", ".git/refs", ".git/refs/heads", ".git/refs/remotes", ".git/refs/remotes/origin"} {
 		if err := os.MkdirAll(filepath.Join(repoDir, dir), 0755); err != nil {
 			return "", fmt.Errorf("error creating directory: %s", err)
 		}

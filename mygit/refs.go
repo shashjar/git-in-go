@@ -7,9 +7,17 @@ import (
 	"strings"
 )
 
-func ResolveRef(refName string, repoDir string) (string, bool, error) {
+// TODO: needs to update how refs are created and resolved: clone, status, commit, push, pull
+
+func ResolveRef(refName string, remote bool, repoDir string) (string, bool, error) {
 	if refName == "HEAD" {
-		headPath := filepath.Join(repoDir, ".git", "HEAD")
+		var headPath string
+		if remote {
+			headPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD")
+		} else {
+			headPath = filepath.Join(repoDir, ".git", "HEAD")
+		}
+
 		headContent, err := os.ReadFile(headPath)
 		if err != nil {
 			return "", false, fmt.Errorf("failed to read HEAD file: %s", err)
@@ -36,7 +44,13 @@ func ResolveRef(refName string, repoDir string) (string, bool, error) {
 	}
 
 	// Try as a branch name
-	branchRefPath := filepath.Join(repoDir, ".git", "refs", "heads", refName)
+	var branchRefPath string
+	if remote {
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", refName)
+	} else {
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "heads", refName)
+	}
+
 	branchRefContent, err := os.ReadFile(branchRefPath)
 	if err != nil {
 		// If the reference doesn't exist yet (e.g., in a new repo)
@@ -49,9 +63,15 @@ func ResolveRef(refName string, repoDir string) (string, bool, error) {
 	return strings.TrimSpace(string(branchRefContent)), true, nil
 }
 
-func UpdateRef(refName string, hash string, repoDir string) error {
+func UpdateRef(refName string, hash string, remote bool, repoDir string) error {
 	if refName == "HEAD" {
-		headPath := filepath.Join(repoDir, ".git", "HEAD")
+		var headPath string
+		if remote {
+			headPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD")
+		} else {
+			headPath = filepath.Join(repoDir, ".git", "HEAD")
+		}
+
 		headContent, err := os.ReadFile(headPath)
 		if err != nil {
 			return fmt.Errorf("failed to read HEAD file: %s", err)
@@ -83,7 +103,13 @@ func UpdateRef(refName string, hash string, repoDir string) error {
 	}
 
 	// Try as a branch name
-	branchRefPath := filepath.Join(repoDir, ".git", "refs", "heads", refName)
+	var branchRefPath string
+	if remote {
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", refName)
+	} else {
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "heads", refName)
+	}
+
 	branchRefDir := filepath.Dir(branchRefPath)
 	if err := os.MkdirAll(branchRefDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory structure for branch %s: %s", refName, err)
