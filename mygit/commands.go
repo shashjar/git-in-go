@@ -431,6 +431,8 @@ func PushHandler(repoDir string) {
 	if err != nil {
 		log.Fatalf("Failed to push commits to remote repository: %s\n", err)
 	}
+
+	fmt.Println("Successfully pushed commits to remote repository")
 }
 
 // TODO: for pull and checkout (checkoutCommit in checkout.go), make sure to update remote refs and local HEAD

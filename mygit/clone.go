@@ -3,13 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 )
 
 func CloneRepo(repoURL string, repoDir string) {
@@ -30,12 +27,15 @@ func CloneRepo(repoURL string, repoDir string) {
 		log.Fatalf("Failed to initialize repository: %s\n", err)
 	}
 
-	refsPktLines, err := refDiscovery(repoURL)
+	username := os.Getenv("GIT_USERNAME")
+	token := os.Getenv("GIT_TOKEN")
+
+	refsPktLines, err := refDiscovery(repoURL, username, token)
 	if err != nil {
 		log.Fatalf("Failed to perform reference discovery on the remote repository: %s\n", err)
 	}
 
-	packfile, headHash, err := uploadPackRequest(repoURL, refsPktLines)
+	packfile, headHash, err := uploadPackRequest(repoURL, refsPktLines, username, token)
 	if err != nil {
 		log.Fatalf("Failed to perform git-upload-pack request: %s\n", err)
 	}
@@ -61,27 +61,18 @@ func CloneRepo(repoURL string, repoDir string) {
 	}
 }
 
-func refDiscovery(repoURL string) ([]string, error) {
-	refDiscoveryResp, err := http.Get(repoURL + "/info/refs?service=git-upload-pack")
+func refDiscovery(repoURL string, username string, token string) ([]string, error) {
+	refDiscoveryRespBody, err := makeHTTPRequest("GET", repoURL+"/info/refs?service=git-upload-pack", username, token, bytes.Buffer{}, []int{200, 304})
 	if err != nil {
-		return []string{}, fmt.Errorf("failed to reach remote repository: %s", err)
-	}
-	if refDiscoveryResp.StatusCode != 200 && refDiscoveryResp.StatusCode != 304 {
-		return []string{}, fmt.Errorf("received invalid status code %s when fetching refs from remote repository", refDiscoveryResp.Status)
-	}
-	defer refDiscoveryResp.Body.Close()
-
-	refDiscoveryBody, err := io.ReadAll(refDiscoveryResp.Body)
-	if err != nil {
-		return []string{}, fmt.Errorf("failed to read response from remote repository: %s", err)
+		return nil, fmt.Errorf("ref discovery request failed: %s", err)
 	}
 
-	validFirstBytes := regexp.MustCompile(`^[0-9a-f]{4}#`).MatchString(string(refDiscoveryBody[:5]))
+	validFirstBytes := regexp.MustCompile(`^[0-9a-f]{4}#`).MatchString(string(refDiscoveryRespBody[:5]))
 	if !validFirstBytes {
 		return []string{}, fmt.Errorf("received invalid response when fetching refs from remote repository")
 	}
 
-	refsPktLines, err := readPktLines(bytes.NewReader(refDiscoveryBody))
+	refsPktLines, err := readPktLines(bytes.NewReader(refDiscoveryRespBody))
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to parse response when fetching refs from remote repository: %s", err)
 	}
@@ -93,7 +84,7 @@ func refDiscovery(repoURL string) ([]string, error) {
 	return refsPktLines, nil
 }
 
-func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, string, error) {
+func uploadPackRequest(repoURL string, refsPktLines []string, username string, token string) ([]byte, string, error) {
 	var headHash string
 	for _, refPktLine := range refsPktLines {
 		if len(refPktLine) > 45 && refPktLine[41:45] == "HEAD" {
@@ -111,26 +102,20 @@ func uploadPackRequest(repoURL string, refsPktLines []string) ([]byte, string, e
 	uploadPackPktLine := createPktLine(fmt.Sprintf("want %s %s", headHash, capabilities))
 	donePktLine := createPktLine("done")
 	uploadPackRequestBody := createPktLineStream([]string{uploadPackPktLine}) + donePktLine
-	uploadPackResp, err := http.Post(repoURL+"/git-upload-pack", "application/x-git-upload-pack-request", strings.NewReader(uploadPackRequestBody))
+
+	var uploadPackReqBody bytes.Buffer
+	uploadPackReqBody.WriteString(uploadPackRequestBody)
+	uploadPackRespBody, err := makeHTTPRequest("POST", repoURL+"/git-upload-pack", username, token, uploadPackReqBody, []int{200})
 	if err != nil {
 		return nil, "", fmt.Errorf("git-upload-pack request failed: %s", err)
 	}
-	if uploadPackResp.StatusCode != 200 {
-		return nil, "", fmt.Errorf("received invalid response status code %s for git-upload-pack request", uploadPackResp.Status)
-	}
-	defer uploadPackResp.Body.Close()
 
-	uploadPackBody, err := io.ReadAll(uploadPackResp.Body)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read git-upload-pack response: %s", err)
-	}
-
-	nakLine, err := readPktLine(bytes.NewReader(uploadPackBody))
+	nakLine, err := readPktLine(bytes.NewReader(uploadPackRespBody))
 	if err != nil || nakLine != "NAK" {
 		return nil, "", fmt.Errorf("expected NAK in git-upload-pack response")
 	}
 
-	return uploadPackBody[8:], headHash, nil
+	return uploadPackRespBody[8:], headHash, nil
 }
 
 func createRefs(headHash string, repoDir string) error {

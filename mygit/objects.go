@@ -722,14 +722,37 @@ func GetAllObjectsInCommit(commitHash string, repoDir string) ([]string, error) 
 
 func parseCommitUser(s string) (*CommitUser, error) {
 	parts := strings.Split(s, " ")
-	dateSeconds, err := strconv.Atoi(parts[4])
-	if err != nil {
-		return nil, err
+
+	var name string
+	var email string
+	var dateSeconds int
+	var timezone string
+	var err error
+
+	if len(parts) == 5 {
+		name = parts[1]
+		email = parts[2][1 : len(parts[2])-1]
+		dateSeconds, err = strconv.Atoi(parts[3])
+		if err != nil {
+			return nil, err
+		}
+		timezone = parts[4]
+	} else if len(parts) == 6 {
+		name = parts[1] + " " + parts[2]
+		email = parts[3][1 : len(parts[3])-1]
+		dateSeconds, err = strconv.Atoi(parts[4])
+		if err != nil {
+			return nil, err
+		}
+		timezone = parts[5]
+	} else {
+		return nil, fmt.Errorf("invalid string format for commit user: %s", s)
 	}
+
 	return &CommitUser{
-		name:        parts[1] + " " + parts[2],
-		email:       parts[3][1 : len(parts[3])-1],
+		name:        name,
+		email:       email,
 		dateSeconds: int64(dateSeconds),
-		timezone:    parts[5],
+		timezone:    timezone,
 	}, nil
 }

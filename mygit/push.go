@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 )
 
@@ -101,30 +99,9 @@ func receivePackRequest(branchName string, localHead string, remoteHead string, 
 	receivePackReqBody.WriteString(refUpdate)
 	receivePackReqBody.Write(packfile)
 
-	receivePackReq, err := http.NewRequest("POST", repoURL+"/git-receive-pack", &receivePackReqBody)
-	if err != nil {
-		return fmt.Errorf("failed to create git-receive-pack request: %s", err)
-	}
-
-	receivePackReq.SetBasicAuth(username, token)
-	receivePackReq.Header.Set("Content-Type", "application/x-git-receive-pack-request")
-	receivePackReq.Header.Set("User-Agent", "git/1.0")
-	receivePackReq.Header.Set("Accept", "*/*")
-
-	client := &http.Client{}
-	receivePackResp, err := client.Do(receivePackReq)
+	receivePackRespBody, err := makeHTTPRequest("POST", repoURL+"/git-receive-pack", username, token, receivePackReqBody, []int{200})
 	if err != nil {
 		return fmt.Errorf("git-receive-pack request failed: %s", err)
-	}
-	if receivePackResp.StatusCode != 200 {
-		body, _ := io.ReadAll(receivePackResp.Body)
-		return fmt.Errorf("received invalid response status code %s for git-receive-pack request. Response body: %s", receivePackResp.Status, string(body))
-	}
-	defer receivePackResp.Body.Close()
-
-	receivePackRespBody, err := io.ReadAll(receivePackResp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read git-receive-pack response: %s", err)
 	}
 
 	// Parse the pkt-line formatted response
