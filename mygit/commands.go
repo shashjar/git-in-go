@@ -396,3 +396,40 @@ func CommitHandler(repoDir string) {
 
 	fmt.Printf("Committed: [%s %s] %s\n", currBranch, commitObj.hash, *commitMessagePtr)
 }
+
+// TODO: add docs
+// TODO: for push, pull, and checkout, make sure to update remote refs and local HEAD
+func PushHandler(repoDir string) {
+	if len(os.Args) != 3 {
+		log.Fatal("Usage: push <remote_repo_url>")
+	}
+
+	repoURL := os.Args[2]
+	err := validateRepoURL(repoURL)
+	if err != nil {
+		log.Fatalf("Failed to validate structure of remote repository URL: %s\n", err)
+	}
+
+	localHead, commitsExist, err := ResolveRef("HEAD", false, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to resolve local HEAD reference: %s\n", err)
+	}
+
+	if !commitsExist {
+		log.Fatal("Nothing to push - no commits found in local repository")
+	}
+
+	remoteHead, commitsExist, err := ResolveRef("HEAD", true, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to resolve remote HEAD reference: %s\n", err)
+	}
+
+	if !commitsExist {
+		log.Fatal("No remote commits found")
+	}
+
+	err = Push(localHead, remoteHead, repoURL, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to push commits to remote repository: %s\n", err)
+	}
+}

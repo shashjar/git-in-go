@@ -95,6 +95,13 @@ Run from the project root.
 ./run.sh commit -m "I'm making a commit"
 ```
 
+# `git push`
+
+```
+./run.sh commit -m "Making a new commit to test my `push` command`
+./run.sh push <remote_repo_url>
+```
+
 # Reading a zlib-compressed file
 
 ```
