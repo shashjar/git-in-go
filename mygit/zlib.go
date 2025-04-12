@@ -28,7 +28,6 @@ func zlibCompress(w io.Writer, b []byte) error {
 func zlibCompressBytes(b []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zlib.NewWriter(&buf)
-	defer zw.Close()
 
 	n, err := zw.Write(b)
 	if err != nil {
@@ -39,6 +38,10 @@ func zlibCompressBytes(b []byte) ([]byte, error) {
 	}
 	if err := zw.Flush(); err != nil {
 		return nil, fmt.Errorf("failed to flush zlib writer: %s", err)
+	}
+
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close zlib writer: %s", err)
 	}
 
 	return buf.Bytes(), nil

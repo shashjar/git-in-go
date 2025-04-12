@@ -592,29 +592,29 @@ func createTreeObjectFromDirInfo(dir string, dirToSubDirs map[string](map[string
 	return createTreeObject(entries, repoDir)
 }
 
-func getBlobsInTree(treeHash string, repoDir string) ([]string, error) {
+func getAllObjectsInTree(treeHash string, repoDir string) ([]string, error) {
 	treeObj, err := ReadTreeObjectFile(treeHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read tree object file: %s", err)
 	}
 
-	blobHashes := []string{}
+	treeObjHashes := []string{treeObj.hash}
 	for _, entry := range treeObj.entries {
 		switch entry.objType {
 		case Blob:
-			blobHashes = append(blobHashes, entry.hash)
+			treeObjHashes = append(treeObjHashes, entry.hash)
 		case Tree:
-			subTreeBlobHashes, err := getBlobsInTree(entry.hash, repoDir)
+			subTreeObjHashes, err := getAllObjectsInTree(entry.hash, repoDir)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get blobs in sub-tree: %s", err)
+				return nil, fmt.Errorf("failed to get objects in sub-tree: %s", err)
 			}
-			blobHashes = append(blobHashes, subTreeBlobHashes...)
+			treeObjHashes = append(treeObjHashes, subTreeObjHashes...)
 		default:
 			return nil, fmt.Errorf("unexpected object type %s in tree %s", entry.objType.toString(), treeHash)
 		}
 	}
 
-	return blobHashes, nil
+	return treeObjHashes, nil
 }
 
 /** COMMITS */
@@ -702,18 +702,22 @@ func CreateCommitObjectFromTree(treeHash string, parentCommitHashes []string, co
 	}, nil
 }
 
-func GetBlobsInCommit(commitHash string, repoDir string) ([]string, error) {
+func GetAllObjectsInCommit(commitHash string, repoDir string) ([]string, error) {
 	commitObj, err := ReadCommitObjectFile(commitHash, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read commit object file: %s", err)
 	}
 
-	blobHashes, err := getBlobsInTree(commitObj.treeHash, repoDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get blobs in commit tree: %s", err)
-	}
+	commitObjHashes := []string{commitObj.hash, commitObj.treeHash}
+	commitObjHashes = append(commitObjHashes, commitObj.parentCommitHashes...)
 
-	return blobHashes, nil
+	treeObjHashes, err := getAllObjectsInTree(commitObj.treeHash, repoDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all objects in commit tree: %s", err)
+	}
+	commitObjHashes = append(commitObjHashes, treeObjHashes...)
+
+	return commitObjHashes, nil
 }
 
 func parseCommitUser(s string) (*CommitUser, error) {

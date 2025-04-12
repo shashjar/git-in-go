@@ -199,7 +199,7 @@ func CloneHandler() {
 // Prints information about the entries (representing repository files) in the Git index file. By default,
 // prints only the filepath of each entry.
 // -s --> Prints the mode and object hash for each entry, in addition to the path.
-func LSFilesHandler(repoDir string) {
+func LsFilesHandler(repoDir string) {
 	if len(os.Args) < 2 || len(os.Args) > 3 {
 		log.Fatal("Usage: ls-files [-s]")
 	}
@@ -397,8 +397,7 @@ func CommitHandler(repoDir string) {
 	fmt.Printf("Committed: [%s %s] %s\n", currBranch, commitObj.hash, *commitMessagePtr)
 }
 
-// TODO: add docs
-// TODO: for push, pull, and checkout, make sure to update remote refs and local HEAD
+// Pushes the local commits to the remote repository, specified by the URL provided.
 func PushHandler(repoDir string) {
 	if len(os.Args) != 3 {
 		log.Fatal("Usage: push <remote_repo_url>")
@@ -433,3 +432,5 @@ func PushHandler(repoDir string) {
 		log.Fatalf("Failed to push commits to remote repository: %s\n", err)
 	}
 }
+
+// TODO: for pull and checkout (checkoutCommit in checkout.go), make sure to update remote refs and local HEAD

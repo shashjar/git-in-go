@@ -23,7 +23,7 @@ func initEnvironmentVariables() {
 		return
 	}
 
-	log.Fatal("Error: no .env file found. Please create one with GIT_USERNAME and GIT_PASSWORD set in either the current directory or parent directory.")
+	log.Fatal("Error: no .env file found. Please create one with GIT_USERNAME and GIT_TOKEN (personal access token) set in either the current directory or parent directory.")
 }
 
 func copyRunSh(repoDir string) error {
@@ -96,7 +96,7 @@ func main() {
 	case "clone":
 		CloneHandler()
 	case "ls-files":
-		LSFilesHandler(repoDir)
+		LsFilesHandler(repoDir)
 	case "add":
 		AddHandler(repoDir)
 	case "reset":
