@@ -17,7 +17,15 @@ func CheckoutCommit(commitHash string, repoDir string) error {
 		return err
 	}
 
-	return checkoutTree(commitObj.treeHash, repoDir, repoDir)
+	if err := checkoutTree(commitObj.treeHash, repoDir, repoDir); err != nil {
+		return err
+	}
+
+	if err := CreateIndexFromWorkingTree(repoDir); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func checkoutTree(treeHash string, currDir string, repoDir string) error {
@@ -65,9 +73,12 @@ func checkoutBlob(blobHash string, filePath string, mode int, repoDir string) er
 		return fmt.Errorf("failed to write file %s: %w", filePath, err)
 	}
 
+	// If any executable bits are set, update the file permissions
 	perm := os.FileMode(mode & 0777)
-	if err := os.Chmod(filePath, perm); err != nil {
-		return fmt.Errorf("failed to set permissions on %s: %w", filePath, err)
+	if perm&0111 != 0 {
+		if err := os.Chmod(filePath, perm); err != nil {
+			return fmt.Errorf("failed to set permissions on %s: %w", filePath, err)
+		}
 	}
 
 	return nil

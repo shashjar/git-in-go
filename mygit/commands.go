@@ -230,22 +230,20 @@ func AddHandler(repoDir string) {
 	}
 
 	addAll := len(os.Args) == 3 && os.Args[2] == "."
-
-	var filesToAdd []string
 	if addAll {
-		var err error
-		filesToAdd, err = getWorkingTreeFilePaths(repoDir)
-		if err != nil {
-			log.Fatalf("Failed to scan repository for all files in working tree: %s\n", err)
+		if err := CreateIndexFromWorkingTree(repoDir); err != nil {
+			log.Fatalf("Failed to create add all files in working tree to index: %s\n", err)
 		}
-	} else {
-		for _, file := range os.Args[2:] {
-			if _, err := os.Stat(filepath.Join(repoDir, file)); err != nil {
-				log.Fatalf("File does not exist: %s\n", file)
-			}
+		return
+	}
 
-			filesToAdd = append(filesToAdd, file)
+	filesToAdd := []string{}
+	for _, file := range os.Args[2:] {
+		if _, err := os.Stat(filepath.Join(repoDir, file)); err != nil {
+			log.Fatalf("File does not exist: %s\n", file)
 		}
+
+		filesToAdd = append(filesToAdd, file)
 	}
 
 	err := AddFilesToIndex(filesToAdd, repoDir)
@@ -291,8 +289,8 @@ func StatusHandler(repoDir string) {
 
 	fmt.Printf("On branch %s\n", status.branch)
 
-	if status.headCommitHashLocal != status.headCommitHashRemote {
-		fmt.Printf("Your local HEAD %s differs from remote HEAD for 'origin/%s': %s.\n", status.headCommitHashLocal, status.branch, status.headCommitHashRemote)
+	if status.localHead != status.remoteHead {
+		fmt.Printf("Your local HEAD %s differs from remote HEAD for 'origin/%s': %s.\n", status.localHead, status.branch, status.remoteHead)
 	}
 
 	if !hasChanges {

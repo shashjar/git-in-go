@@ -54,6 +54,11 @@ func CloneRepo(repoURL string, repoDir string) {
 	if err != nil {
 		log.Fatalf("Failed to check out HEAD commit: %s\n", err)
 	}
+
+	err = copyRunSh(repoDir)
+	if err != nil {
+		log.Fatalf("Failed to copy mygit run.sh script into cloned repository: %s\n", err)
+	}
 }
 
 func refDiscovery(repoURL string) ([]string, error) {

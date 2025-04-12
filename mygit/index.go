@@ -128,8 +128,27 @@ func RemoveFilesFromIndex(paths []string, repoDir string) error {
 	return nil
 }
 
+func CreateIndexFromWorkingTree(repoDir string) error {
+	indexPath := filepath.Join(repoDir, ".git", "index")
+	if err := os.Remove(indexPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove index file: %s", err)
+	}
+
+	filesToAdd, err := getWorkingTreeFilePaths(repoDir)
+	if err != nil {
+		return fmt.Errorf("failed to scan repository for all files in working tree: %s", err)
+	}
+
+	if err := AddFilesToIndex(filesToAdd, repoDir); err != nil {
+		return fmt.Errorf("failed to update index: %s", err)
+	}
+
+	return nil
+}
+
 func createIndexEntry(path string, repoDir string) (*IndexEntry, error) {
-	info, err := os.Stat(filepath.Join(repoDir, path))
+	fullPath := filepath.Join(repoDir, path)
+	info, err := os.Stat(fullPath)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +158,7 @@ func createIndexEntry(path string, repoDir string) (*IndexEntry, error) {
 		return nil, fmt.Errorf("unable to create an index entry for a directory: '%s'", path)
 	}
 
-	blobObj, err := CreateBlobObjectFromFile(path, repoDir)
+	blobObj, err := CreateBlobObjectFromFile(fullPath, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a blob object for this index entry: '%s'", path)
 	}

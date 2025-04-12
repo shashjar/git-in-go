@@ -26,13 +26,13 @@ type RepositoryFileStatus struct {
 
 // Represents the status of the entire repository
 type RepositoryStatus struct {
-	branch               string
-	headCommitHashLocal  string
-	headCommitHashRemote string
-	stagedFiles          []*RepositoryFileStatus
-	notStagedFiles       []*RepositoryFileStatus
-	untrackedFiles       []*RepositoryFileStatus
-	unmodifiedFiles      []*RepositoryFileStatus
+	branch          string
+	localHead       string
+	remoteHead      string
+	stagedFiles     []*RepositoryFileStatus
+	notStagedFiles  []*RepositoryFileStatus
+	untrackedFiles  []*RepositoryFileStatus
+	unmodifiedFiles []*RepositoryFileStatus
 }
 
 func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
@@ -66,7 +66,7 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		currIndexEntriesMap[entry.path] = entry
 	}
 
-	headCommitHashLocal, commitsExist, err := ResolveRef("HEAD", false, repoDir)
+	localHead, commitsExist, err := ResolveRef("HEAD", false, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -81,22 +81,22 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		}
 
 		return &RepositoryStatus{
-			branch:               branch,
-			headCommitHashLocal:  headCommitHashLocal,
-			headCommitHashRemote: "",
-			stagedFiles:          stagedFiles,
-			notStagedFiles:       notStagedFiles,
-			untrackedFiles:       untrackedFiles,
-			unmodifiedFiles:      unmodifiedFiles,
+			branch:          branch,
+			localHead:       localHead,
+			remoteHead:      "",
+			stagedFiles:     stagedFiles,
+			notStagedFiles:  notStagedFiles,
+			untrackedFiles:  untrackedFiles,
+			unmodifiedFiles: unmodifiedFiles,
 		}, nil
 	}
 
-	headCommitHashRemote, _, err := ResolveRef("HEAD", true, repoDir)
+	remoteHead, _, err := ResolveRef("HEAD", true, repoDir)
 	if err != nil {
 		return nil, err
 	}
 
-	headCommitObj, err := ReadCommitObjectFile(headCommitHashLocal, repoDir)
+	headCommitObj, err := ReadCommitObjectFile(localHead, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read HEAD commit object file: %s", err)
 	}
@@ -193,13 +193,13 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 	}
 
 	return &RepositoryStatus{
-		branch:               branch,
-		headCommitHashLocal:  headCommitHashLocal,
-		headCommitHashRemote: headCommitHashRemote,
-		stagedFiles:          stagedFiles,
-		notStagedFiles:       notStagedFiles,
-		untrackedFiles:       untrackedFiles,
-		unmodifiedFiles:      unmodifiedFiles,
+		branch:          branch,
+		localHead:       localHead,
+		remoteHead:      remoteHead,
+		stagedFiles:     stagedFiles,
+		notStagedFiles:  notStagedFiles,
+		untrackedFiles:  untrackedFiles,
+		unmodifiedFiles: unmodifiedFiles,
 	}, nil
 }
 
