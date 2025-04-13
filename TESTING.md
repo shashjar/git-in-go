@@ -102,6 +102,12 @@ Run from the project root.
 ./run.sh push <remote_repo_url>
 ```
 
+# `git pull`
+
+```
+./run.sh pull <remote_repo_url>
+```
+
 # Reading a zlib-compressed file
 
 ```

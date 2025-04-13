@@ -107,6 +107,8 @@ func main() {
 		CommitHandler(repoDir)
 	case "push":
 		PushHandler(repoDir)
+	case "pull":
+		PullHandler(repoDir)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

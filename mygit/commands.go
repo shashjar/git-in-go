@@ -435,4 +435,26 @@ func PushHandler(repoDir string) {
 	fmt.Println("Successfully pushed commits to remote repository")
 }
 
-// TODO: for pull and checkout (checkoutCommit in checkout.go), make sure to update remote refs and local HEAD
+// Pulls the remote commits to the local repository, using the given remote repository URL. As a result,
+// the local HEAD will be updated to point to the remote HEAD.
+func PullHandler(repoDir string) {
+	if len(os.Args) != 3 {
+		log.Fatal("Usage: pull <remote_repo_url>")
+	}
+
+	repoURL := os.Args[2]
+	err := validateRepoURL(repoURL)
+	if err != nil {
+		log.Fatalf("Failed to validate structure of remote repository URL: %s\n", err)
+	}
+
+	// TODO: implement
+	err = Pull(repoURL, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to pull remote commits to local repository: %s\n", err)
+	}
+
+	fmt.Println("Successfully pulled remote commits to local repository")
+}
+
+// TODO: for checkout (checkoutCommit in checkout.go), make sure to update HEAD
