@@ -23,7 +23,7 @@ func initEnvironmentVariables() {
 		return
 	}
 
-	log.Fatal("Error: no .env file found. Please create one with GIT_USERNAME and GIT_TOKEN (personal access token) set in either the current directory or parent directory.")
+	log.Fatal("Error: no .env file found. Please create one with GIT_USERNAME and GIT_TOKEN (personal access token) set in either the current directory or parent directory. If you only want to work with public repositories, you can set dummy values.")
 }
 
 func copyRunSh(repoDir string) error {
@@ -109,6 +109,8 @@ func main() {
 		PushHandler(repoDir)
 	case "pull":
 		PullHandler(repoDir)
+	case "checkout":
+		CheckoutHandler(repoDir)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)

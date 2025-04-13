@@ -66,7 +66,7 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		currIndexEntriesMap[entry.path] = entry
 	}
 
-	localHead, commitsExist, err := ResolveRef("HEAD", false, repoDir)
+	localHead, commitsExist, err := ResolveHead(false, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func GetRepoStatus(repoDir string) (*RepositoryStatus, error) {
 		}, nil
 	}
 
-	remoteHead, _, err := ResolveRef("HEAD", true, repoDir)
+	remoteHead, _, err := ResolveHead(true, repoDir)
 	if err != nil {
 		return nil, err
 	}

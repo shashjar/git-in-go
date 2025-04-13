@@ -3,20 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
 )
 
 func Push(localHead string, remoteHead string, repoURL string, repoDir string) error {
-	username := os.Getenv("GIT_USERNAME")
-	if username == "" {
-		return fmt.Errorf("GIT_USERNAME environment variable not set")
-	}
-
-	token := os.Getenv("GIT_TOKEN")
-	if token == "" {
-		return fmt.Errorf("GIT_TOKEN environment variable not set. Please create a personal access token at https://github.com/settings/tokens")
-	}
-
 	missingObjHashes, err := calculateMissingObjects(localHead, remoteHead, repoDir)
 	if err != nil {
 		return fmt.Errorf("failed to calculate objects in local HEAD missing from remote HEAD: %s", err)
@@ -40,19 +29,19 @@ func Push(localHead string, remoteHead string, repoURL string, repoDir string) e
 		return fmt.Errorf("failed to create packfile of objects to push: %s", err)
 	}
 
-	err = receivePackRequest(branchName, localHead, remoteHead, packfile, repoURL, username, token)
+	err = receivePackRequest(branchName, localHead, remoteHead, packfile, repoURL)
 	if err != nil {
 		return fmt.Errorf("failed to perform receive-pack request sending packfile to remote repository: %s", err)
 	}
 
-	err = UpdateRef("HEAD", localHead, true, repoDir)
+	err = UpdateBranchRef(branchName, localHead, false, repoDir)
 	if err != nil {
-		return fmt.Errorf("failed to update remote HEAD reference: %s", err)
+		return fmt.Errorf("failed to update local branch reference for %s: %s", branchName, err)
 	}
 
-	err = UpdateRef(branchName, localHead, true, repoDir)
+	err = UpdateBranchRef(branchName, localHead, true, repoDir)
 	if err != nil {
-		return fmt.Errorf("failed to update remote branch reference: %s", err)
+		return fmt.Errorf("failed to update remote branch reference for %s: %s", branchName, err)
 	}
 
 	return nil
@@ -89,7 +78,7 @@ func calculateMissingObjects(localHead string, remoteHead string, repoDir string
 	return missingObjHashes, nil
 }
 
-func receivePackRequest(branchName string, localHead string, remoteHead string, packfile []byte, repoURL string, username string, token string) error {
+func receivePackRequest(branchName string, localHead string, remoteHead string, packfile []byte, repoURL string) error {
 	// Format the ref update line according to the Git protocol
 	// Format: <old-value> SP <new-value> SP <ref-name> NUL report-status
 	refUpdateLine := fmt.Sprintf("%s %s refs/heads/%s\x00 report-status", remoteHead, localHead, branchName)
@@ -99,7 +88,7 @@ func receivePackRequest(branchName string, localHead string, remoteHead string, 
 	receivePackReqBody.WriteString(refUpdate)
 	receivePackReqBody.Write(packfile)
 
-	receivePackRespBody, err := makeHTTPRequest("POST", repoURL+"/git-receive-pack", username, token, receivePackReqBody, []int{200})
+	receivePackRespBody, err := makeHTTPRequest("POST", repoURL+"/git-receive-pack", receivePackReqBody, []int{200})
 	if err != nil {
 		return fmt.Errorf("git-receive-pack request failed: %s", err)
 	}

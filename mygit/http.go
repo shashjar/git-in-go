@@ -5,10 +5,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"slices"
 )
 
-func makeHTTPRequest(method string, url string, username string, token string, body bytes.Buffer, expectedStatusCodes []int) ([]byte, error) {
+func makeHTTPRequest(method string, url string, body bytes.Buffer, expectedStatusCodes []int) ([]byte, error) {
+	username := os.Getenv("GIT_USERNAME")
+	if username == "" {
+		return nil, fmt.Errorf("GIT_USERNAME environment variable not set")
+	}
+
+	token := os.Getenv("GIT_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("GIT_TOKEN environment variable not set. Please create a personal access token at https://github.com/settings/tokens")
+	}
+
 	req, err := http.NewRequest(method, url, &body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request to %s with method %s: %s", url, method, err)

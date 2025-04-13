@@ -21,6 +21,11 @@ func CheckoutCommit(commitHash string, repoDir string) error {
 		return err
 	}
 
+	err = copyRunSh(repoDir)
+	if err != nil {
+		return fmt.Errorf("failed to copy mygit run.sh script into repository: %s", err)
+	}
+
 	if err := CreateIndexFromWorkingTree(repoDir); err != nil {
 		return err
 	}

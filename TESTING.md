@@ -108,6 +108,13 @@ Run from the project root.
 ./run.sh pull <remote_repo_url>
 ```
 
+# `git checkout`
+
+```
+./run.sh checkout test-branch
+./run.sh checkout -b new-branch
+```
+
 # Reading a zlib-compressed file
 
 ```

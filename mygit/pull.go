@@ -4,22 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 )
 
 func Pull(repoURL string, repoDir string) error {
-	username := os.Getenv("GIT_USERNAME")
-	if username == "" {
-		return fmt.Errorf("GIT_USERNAME environment variable not set")
-	}
-
-	token := os.Getenv("GIT_TOKEN")
-	if token == "" {
-		return fmt.Errorf("GIT_TOKEN environment variable not set. Please create a personal access token at https://github.com/settings/tokens")
-	}
-
-	refsMap, err := refDiscovery(repoURL, username, token)
+	refsMap, err := refDiscovery(repoURL)
 	if err != nil {
 		log.Fatalf("Failed to perform reference discovery on the remote repository: %s\n", err)
 	}
@@ -29,19 +18,22 @@ func Pull(repoURL string, repoDir string) error {
 		return fmt.Errorf("failed to get current branch: %s", err)
 	}
 
-	packfile, err := uploadPackRequest(repoURL, refsMap, []string{branchName}, username, token)
+	packfile, err := uploadPackRequest(repoURL, refsMap)
 	if err != nil {
 		return fmt.Errorf("failed to perform git-upload-pack request: %s", err)
 	}
 
-	headHash := refsMap[branchName]
+	branchHeadHash, ok := refsMap[branchName]
+	if !ok {
+		log.Fatalf("No branch named %s found in remote repository", branchName)
+	}
 
 	err = ReadPackfile(packfile, repoDir)
 	if err != nil {
 		return fmt.Errorf("failed to read packfile: %s", err)
 	}
 
-	err = CheckoutCommit(headHash, repoDir)
+	err = CheckoutCommit(branchHeadHash, repoDir)
 	if err != nil {
 		return fmt.Errorf("failed to check out HEAD commit: %s", err)
 	}
@@ -51,31 +43,16 @@ func Pull(repoURL string, repoDir string) error {
 		return fmt.Errorf("failed to copy mygit run.sh script into repository: %s", err)
 	}
 
-	err = UpdateRef("HEAD", headHash, false, repoDir)
+	err = updateRefsAfterPull(refsMap, repoDir)
 	if err != nil {
-		return fmt.Errorf("failed to update local HEAD reference: %s", err)
-	}
-
-	err = UpdateRef(branchName, headHash, false, repoDir)
-	if err != nil {
-		return fmt.Errorf("failed to update local branch reference: %s", err)
-	}
-
-	err = UpdateRef("HEAD", headHash, true, repoDir)
-	if err != nil {
-		return fmt.Errorf("failed to update remote HEAD reference: %s", err)
-	}
-
-	err = UpdateRef(branchName, headHash, true, repoDir)
-	if err != nil {
-		return fmt.Errorf("failed to update remote branch reference: %s", err)
+		return err
 	}
 
 	return nil
 }
 
-func refDiscovery(repoURL string, username string, token string) (map[string]string, error) {
-	refDiscoveryRespBody, err := makeHTTPRequest("GET", repoURL+"/info/refs?service=git-upload-pack", username, token, bytes.Buffer{}, []int{200, 304})
+func refDiscovery(repoURL string) (map[string]string, error) {
+	refDiscoveryRespBody, err := makeHTTPRequest("GET", repoURL+"/info/refs?service=git-upload-pack", bytes.Buffer{}, []int{200, 304})
 	if err != nil {
 		return nil, fmt.Errorf("ref discovery request failed: %s", err)
 	}
@@ -113,14 +90,10 @@ func refDiscovery(repoURL string, username string, token string) (map[string]str
 	return refsMap, nil
 }
 
-func uploadPackRequest(repoURL string, refsMap map[string]string, wantRefs []string, username string, token string) ([]byte, error) {
+func uploadPackRequest(repoURL string, refsMap map[string]string) ([]byte, error) {
 	wantObjHashes := []string{}
-	for _, wantRef := range wantRefs {
-		if wantObjHash, exists := refsMap[wantRef]; exists {
-			wantObjHashes = append(wantObjHashes, wantObjHash)
-		} else {
-			return nil, fmt.Errorf("ref %s not found in remote repository", wantRef)
-		}
+	for _, objHash := range refsMap {
+		wantObjHashes = append(wantObjHashes, objHash)
 	}
 
 	capabilities := "multi_ack ofs-delta thin-pack include-tag"
@@ -133,7 +106,7 @@ func uploadPackRequest(repoURL string, refsMap map[string]string, wantRefs []str
 
 	var uploadPackReqBody bytes.Buffer
 	uploadPackReqBody.WriteString(uploadPackRequestBody)
-	uploadPackRespBody, err := makeHTTPRequest("POST", repoURL+"/git-upload-pack", username, token, uploadPackReqBody, []int{200})
+	uploadPackRespBody, err := makeHTTPRequest("POST", repoURL+"/git-upload-pack", uploadPackReqBody, []int{200})
 	if err != nil {
 		return nil, fmt.Errorf("git-upload-pack request failed: %s", err)
 	}
@@ -144,4 +117,24 @@ func uploadPackRequest(repoURL string, refsMap map[string]string, wantRefs []str
 	}
 
 	return uploadPackRespBody[8:], nil
+}
+
+func updateRefsAfterPull(refsMap map[string]string, repoDir string) error {
+	for branchName, refHash := range refsMap {
+		if branchName == "HEAD" {
+			continue
+		}
+
+		err := UpdateBranchRef(branchName, refHash, false, repoDir)
+		if err != nil {
+			return fmt.Errorf("failed to update local branch reference for %s: %s", branchName, err)
+		}
+
+		err = UpdateBranchRef(branchName, refHash, true, repoDir)
+		if err != nil {
+			return fmt.Errorf("failed to update remote branch reference for %s: %s", branchName, err)
+		}
+	}
+
+	return nil
 }

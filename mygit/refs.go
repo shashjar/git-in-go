@@ -7,49 +7,70 @@ import (
 	"strings"
 )
 
-func ResolveRef(refName string, remote bool, repoDir string) (string, bool, error) {
-	if refName == "HEAD" {
-		var headPath string
-		if remote {
-			headPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD")
-		} else {
-			headPath = filepath.Join(repoDir, ".git", "HEAD")
-		}
-
-		headContent, err := os.ReadFile(headPath)
-		if err != nil {
-			return "", false, fmt.Errorf("failed to read HEAD file: %s", err)
-		}
-		headStr := strings.TrimSpace(string(headContent))
-
-		// Check if HEAD is a symbolic reference
-		if strings.HasPrefix(headStr, "ref: ") {
-			refPath := strings.TrimPrefix(headStr, "ref: ")
-			refFilePath := filepath.Join(repoDir, ".git", refPath)
-			refContent, err := os.ReadFile(refFilePath)
-			if err != nil {
-				// If the reference doesn't exist yet (e.g., in a new repo)
-				if os.IsNotExist(err) {
-					return "", false, nil
-				}
-				return "", false, fmt.Errorf("failed to read reference file %s: %s", refPath, err)
-			}
-
-			return strings.TrimSpace(string(refContent)), true, nil
-		} else { // HEAD points directly to a commit (detached HEAD state)
-			return headStr, true, nil
-		}
+func ResolveHead(remote bool, repoDir string) (string, bool, error) {
+	var headPath string
+	if remote {
+		headPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD")
+	} else {
+		headPath = filepath.Join(repoDir, ".git", "HEAD")
 	}
 
-	// Try as a branch name
+	headContentBytes, err := os.ReadFile(headPath)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to read HEAD file %s: %s", headPath, err)
+	}
+	headContent := strings.TrimSpace(string(headContentBytes))
+
+	// Check if HEAD is a symbolic reference
+	if strings.HasPrefix(headContent, "ref: ") {
+		refPath := strings.TrimPrefix(headContent, "ref: ")
+		refFilePath := filepath.Join(repoDir, ".git", refPath)
+		refContentBytes, err := os.ReadFile(refFilePath)
+		if err != nil {
+			// If the reference doesn't exist yet (e.g., in a new repo)
+			if os.IsNotExist(err) {
+				return "", false, nil
+			}
+			return "", false, fmt.Errorf("failed to read reference file %s: %s", refPath, err)
+		}
+
+		return strings.TrimSpace(string(refContentBytes)), true, nil
+	} else { // HEAD points directly to a commit (detached HEAD state)
+		return headContent, true, nil
+	}
+}
+
+func UpdateHeadWithBranchRef(branchName string, remote bool, repoDir string) error {
+	var headPath string
+	if remote {
+		headPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD")
+	} else {
+		headPath = filepath.Join(repoDir, ".git", "HEAD")
+	}
+
+	var branchRefContent string
+	if remote {
+		branchRefContent = fmt.Sprintf("ref: refs/remotes/origin/%s", branchName)
+	} else {
+		branchRefContent = fmt.Sprintf("ref: refs/heads/%s", branchName)
+	}
+
+	if err := os.WriteFile(headPath, []byte(branchRefContent), 0644); err != nil {
+		return fmt.Errorf("failed to write to HEAD file %s: %s", headPath, err)
+	}
+
+	return nil
+}
+
+func ResolveBranchRef(branchName string, remote bool, repoDir string) (string, bool, error) {
 	var branchRefPath string
 	if remote {
-		branchRefPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", refName)
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", branchName)
 	} else {
-		branchRefPath = filepath.Join(repoDir, ".git", "refs", "heads", refName)
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "heads", branchName)
 	}
 
-	branchRefContent, err := os.ReadFile(branchRefPath)
+	branchRefContentBytes, err := os.ReadFile(branchRefPath)
 	if err != nil {
 		// If the reference doesn't exist yet (e.g., in a new repo)
 		if os.IsNotExist(err) {
@@ -58,62 +79,32 @@ func ResolveRef(refName string, remote bool, repoDir string) (string, bool, erro
 		return "", false, fmt.Errorf("failed to read branch reference file %s: %s", branchRefPath, err)
 	}
 
-	return strings.TrimSpace(string(branchRefContent)), true, nil
+	return strings.TrimSpace(string(branchRefContentBytes)), true, nil
 }
 
-func UpdateRef(refName string, hash string, remote bool, repoDir string) error {
-	if refName == "HEAD" {
-		var headPath string
-		if remote {
-			headPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "HEAD")
-		} else {
-			headPath = filepath.Join(repoDir, ".git", "HEAD")
-		}
-
-		headContent, err := os.ReadFile(headPath)
-		if err != nil {
-			return fmt.Errorf("failed to read HEAD file: %s", err)
-		}
-		headStr := strings.TrimSpace(string(headContent))
-
-		// Check if HEAD is a symbolic reference
-		if strings.HasPrefix(headStr, "ref: ") {
-			refPath := strings.TrimPrefix(headStr, "ref: ")
-			refFilePath := filepath.Join(repoDir, ".git", refPath)
-
-			refDir := filepath.Dir(refFilePath)
-			if err := os.MkdirAll(refDir, 0755); err != nil {
-				return fmt.Errorf("failed to create directory structure for %s: %s", refPath, err)
-			}
-
-			if err := os.WriteFile(refFilePath, []byte(hash), 0644); err != nil {
-				return fmt.Errorf("failed to write to reference file %s: %s", refFilePath, err)
-			}
-
-			return nil
-		} else { // HEAD points directly to a commit (detached HEAD state)
-			if err := os.WriteFile(headPath, []byte(hash), 0644); err != nil {
-				return fmt.Errorf("failed to update HEAD file: %s", err)
-			}
-
-			return nil
-		}
+func UpdateCurrentBranchRef(commitHash string, remote bool, repoDir string) error {
+	branchName, err := getCurrentBranch(repoDir)
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %s", err)
 	}
 
-	// Try as a branch name
+	return UpdateBranchRef(branchName, commitHash, remote, repoDir)
+}
+
+func UpdateBranchRef(branchName string, commitHash string, remote bool, repoDir string) error {
 	var branchRefPath string
 	if remote {
-		branchRefPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", refName)
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "remotes", "origin", branchName)
 	} else {
-		branchRefPath = filepath.Join(repoDir, ".git", "refs", "heads", refName)
+		branchRefPath = filepath.Join(repoDir, ".git", "refs", "heads", branchName)
 	}
 
 	branchRefDir := filepath.Dir(branchRefPath)
 	if err := os.MkdirAll(branchRefDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory structure for branch %s: %s", refName, err)
+		return fmt.Errorf("failed to create ref directory structure for branch %s: %s", branchName, err)
 	}
 
-	if err := os.WriteFile(branchRefPath, []byte(hash), 0644); err != nil {
+	if err := os.WriteFile(branchRefPath, []byte(commitHash), 0644); err != nil {
 		return fmt.Errorf("failed to write to branch reference file %s: %s", branchRefPath, err)
 	}
 

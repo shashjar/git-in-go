@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 )
 
 func CloneRepo(repoURL string, repoDir string) {
@@ -25,29 +24,24 @@ func CloneRepo(repoURL string, repoDir string) {
 		log.Fatalf("Failed to initialize repository: %s\n", err)
 	}
 
-	username := os.Getenv("GIT_USERNAME")
-	token := os.Getenv("GIT_TOKEN")
-
-	refsMap, err := refDiscovery(repoURL, username, token)
+	refsMap, err := refDiscovery(repoURL)
 	if err != nil {
 		log.Fatalf("Failed to perform reference discovery on the remote repository: %s\n", err)
 	}
 
-	packfile, err := uploadPackRequest(repoURL, refsMap, []string{"HEAD"}, username, token)
+	packfile, err := uploadPackRequest(repoURL, refsMap)
 	if err != nil {
 		log.Fatalf("Failed to perform git-upload-pack request: %s\n", err)
 	}
 
-	headHash := refsMap["HEAD"]
+	headHash, ok := refsMap["HEAD"]
+	if !ok {
+		log.Fatalf("No HEAD reference found in remote repository")
+	}
 
 	err = ReadPackfile(packfile, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to read packfile: %s\n", err)
-	}
-
-	err = createRefs(headHash, repoDir)
-	if err != nil {
-		log.Fatalf("Failed to create refs: %s\n", err)
 	}
 
 	err = CheckoutCommit(headHash, repoDir)
@@ -59,20 +53,9 @@ func CloneRepo(repoURL string, repoDir string) {
 	if err != nil {
 		log.Fatalf("Failed to copy mygit run.sh script into cloned repository: %s\n", err)
 	}
-}
 
-func createRefs(headHash string, repoDir string) error {
-	masterRefPathLocal := filepath.Join(repoDir, ".git", "refs", "heads", "master")
-	err := os.WriteFile(masterRefPathLocal, []byte(headHash+"\n"), 0644)
+	err = updateRefsAfterPull(refsMap, repoDir)
 	if err != nil {
-		return fmt.Errorf("failed to write master branch local reference: %s", err)
+		log.Fatalf("Failed to create refs: %s\n", err)
 	}
-
-	masterRefPathRemote := filepath.Join(repoDir, ".git", "refs", "remotes", "origin", "master")
-	err = os.WriteFile(masterRefPathRemote, []byte(headHash+"\n"), 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write master branch remote reference: %s", err)
-	}
-
-	return nil
 }

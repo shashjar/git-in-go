@@ -26,7 +26,10 @@ This is a living document storing some ideas for extensions & improvements that 
   - [x] Write the main `push` handler, making the HTTP request to the remote repo with the user's username and password and the packfile
 - [x] Update `git clone` to use `GIT_USERNAME` and `GIT_TOKEN` environment variables if cloning a private repository, like `git push` does
 - [x] Implement `git pull`
-- [ ] Implement creation and checking out of branches
+- [ ] Implement `git checkout`
+  - [x] Should be able to check out a branch
+  - [x] Implement creation of new branches
+  - [ ] Implement pushing a new branch once you've created it locally
 
 ## Aesthetics/Usability
 

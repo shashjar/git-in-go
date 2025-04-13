@@ -364,7 +364,7 @@ func CommitHandler(repoDir string) {
 	commitMessagePtr := flag.String("m", "Made a commit!", "Commit message")
 	flag.Parse()
 
-	headCommitHash, commitsExist, err := ResolveRef("HEAD", false, repoDir)
+	headCommitHash, commitsExist, err := ResolveHead(false, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve HEAD reference: %s\n", err)
 	}
@@ -384,9 +384,9 @@ func CommitHandler(repoDir string) {
 		log.Fatalf("Could not create commit object from tree: %s\n", err)
 	}
 
-	err = UpdateRef("HEAD", commitObj.hash, false, repoDir)
+	err = UpdateCurrentBranchRef(commitObj.hash, false, repoDir)
 	if err != nil {
-		log.Fatalf("Failed to update HEAD reference: %s\n", err)
+		log.Fatalf("Failed to update current branch reference: %s\n", err)
 	}
 
 	currBranch, err := getCurrentBranch(repoDir)
@@ -409,7 +409,7 @@ func PushHandler(repoDir string) {
 		log.Fatalf("Failed to validate structure of remote repository URL: %s\n", err)
 	}
 
-	localHead, commitsExist, err := ResolveRef("HEAD", false, repoDir)
+	localHead, commitsExist, err := ResolveHead(false, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve local HEAD reference: %s\n", err)
 	}
@@ -418,7 +418,7 @@ func PushHandler(repoDir string) {
 		log.Fatal("Nothing to push - no commits found in local repository")
 	}
 
-	remoteHead, commitsExist, err := ResolveRef("HEAD", true, repoDir)
+	remoteHead, commitsExist, err := ResolveHead(true, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve remote HEAD reference: %s\n", err)
 	}
@@ -435,8 +435,8 @@ func PushHandler(repoDir string) {
 	fmt.Println("Successfully pushed commits to remote repository")
 }
 
-// Pulls the remote commits to the local repository, using the given remote repository URL. As a result,
-// the local HEAD will be updated to point to the remote HEAD.
+// Pulls the remote commits for all refs found during reference discovery to the local repository, using the given
+// remote repository URL. As a result, the local HEAD will be updated to point to the remote HEAD.
 func PullHandler(repoDir string) {
 	if len(os.Args) != 3 {
 		log.Fatal("Usage: pull <remote_repo_url>")
@@ -448,7 +448,6 @@ func PullHandler(repoDir string) {
 		log.Fatalf("Failed to validate structure of remote repository URL: %s\n", err)
 	}
 
-	// TODO: implement
 	err = Pull(repoURL, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to pull remote commits to local repository: %s\n", err)
@@ -457,4 +456,35 @@ func PullHandler(repoDir string) {
 	fmt.Println("Successfully pulled remote commits to local repository")
 }
 
-// TODO: for checkout (checkoutCommit in checkout.go), make sure to update HEAD
+// Checks out the branch identified by the given name.
+// -b --> Creates a new branch with the given name and checks it out.
+func CheckoutHandler(repoDir string) {
+	if len(os.Args) < 3 || len(os.Args) > 4 {
+		log.Fatal("Usage: checkout [-b] <branch_name>")
+	}
+
+	var branchName string
+	var createBranch bool
+	if len(os.Args) == 4 && os.Args[2] == "-b" {
+		branchName = os.Args[3]
+		createBranch = true
+	} else {
+		branchName = os.Args[2]
+		createBranch = false
+	}
+
+	if createBranch {
+		err := CreateBranch(branchName, repoDir)
+		if err != nil {
+			log.Fatalf("Failed to create branch %s: %s\n", branchName, err)
+		}
+		fmt.Printf("Created branch '%s'\n", branchName)
+	}
+
+	err := CheckoutBranch(branchName, repoDir)
+	if err != nil {
+		log.Fatalf("Failed to checkout branch %s: %s\n", branchName, err)
+	}
+
+	fmt.Printf("Switched to branch '%s'\n", branchName)
+}
