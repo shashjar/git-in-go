@@ -6,7 +6,9 @@ An implementation of Git using Go. Inspired by the [CodeCrafters Git challenge](
 
 The `mygit` program entrypoint is written in [main.go](mygit/main.go), which then relies on the command handlers in [commands.go](mygit/commands.go).
 
-![Git Logo](./docs/assets/git-logo.png)
+<div align="center">
+  <img src="./docs/assets/git-logo.png" alt="Git Logo">
+</div>
 
 ## Git Object Representation
 
