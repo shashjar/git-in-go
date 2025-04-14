@@ -289,7 +289,9 @@ func StatusHandler(repoDir string) {
 
 	fmt.Printf("On branch %s\n", status.branch)
 
-	if status.localHead != status.remoteHead {
+	if status.remoteHead == "" {
+		fmt.Printf("There are no remote commits for the %s branch. Push in order to create the remote branch.\n", status.branch)
+	} else if status.localHead != status.remoteHead {
 		fmt.Printf("Your local HEAD %s differs from remote HEAD for 'origin/%s': %s.\n", status.localHead, status.branch, status.remoteHead)
 	}
 
@@ -409,22 +411,22 @@ func PushHandler(repoDir string) {
 		log.Fatalf("Failed to validate structure of remote repository URL: %s\n", err)
 	}
 
-	localHead, commitsExist, err := ResolveHead(false, repoDir)
+	localHead, localCommitsExist, err := ResolveHead(false, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve local HEAD reference: %s\n", err)
 	}
 
-	if !commitsExist {
+	if !localCommitsExist {
 		log.Fatal("Nothing to push - no commits found in local repository")
 	}
 
-	remoteHead, commitsExist, err := ResolveHead(true, repoDir)
+	remoteHead, remoteCommitsExist, err := ResolveHead(true, repoDir)
 	if err != nil {
 		log.Fatalf("Failed to resolve remote HEAD reference: %s\n", err)
 	}
 
-	if !commitsExist {
-		log.Fatal("No remote commits found")
+	if !remoteCommitsExist {
+		remoteHead = ""
 	}
 
 	err = Push(localHead, remoteHead, repoURL, repoDir)

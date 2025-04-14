@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 func Push(localHead string, remoteHead string, repoURL string, repoDir string) error {
@@ -50,12 +51,17 @@ func Push(localHead string, remoteHead string, repoURL string, repoDir string) e
 func calculateMissingObjects(localHead string, remoteHead string, repoDir string) ([]string, error) {
 	localObjHashes, err := GetAllObjectsInCommit(localHead, repoDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get blobs in local HEAD: %s", err)
+		return nil, fmt.Errorf("failed to get all objects in local HEAD: %s", err)
 	}
 
-	remoteObjHashes, err := GetAllObjectsInCommit(remoteHead, repoDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get blobs in remote HEAD: %s", err)
+	var remoteObjHashes []string
+	if remoteHead == "" {
+		remoteObjHashes = []string{}
+	} else {
+		remoteObjHashes, err = GetAllObjectsInCommit(remoteHead, repoDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get all objects in remote HEAD: %s", err)
+		}
 	}
 
 	remoteObjHashesSet := make(map[string]struct{}, len(remoteObjHashes))
@@ -79,6 +85,11 @@ func calculateMissingObjects(localHead string, remoteHead string, repoDir string
 }
 
 func receivePackRequest(branchName string, localHead string, remoteHead string, packfile []byte, repoURL string) error {
+	// When creating a new branch, old-value should be all zeros
+	if remoteHead == "" {
+		remoteHead = strings.Repeat("0", OBJECT_HASH_LENGTH_STRING)
+	}
+
 	// Format the ref update line according to the Git protocol
 	// Format: <old-value> SP <new-value> SP <ref-name> NUL report-status
 	refUpdateLine := fmt.Sprintf("%s %s refs/heads/%s\x00 report-status", remoteHead, localHead, branchName)
